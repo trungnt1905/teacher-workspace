@@ -1,8 +1,10 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { ChevronRight, Loader2, ShieldCheck } from 'lucide-vue-next'
 import { useSyncStore } from '../../stores/sync'
 import { checkFile } from '../../utils/timetable'
 import FilePicker from './FilePicker.vue'
+import AppPanel from '../ui/AppPanel.vue'
 
 const sync = useSyncStore()
 const source = ref(null)
@@ -10,63 +12,64 @@ const target = ref(null)
 
 const ready = computed(() => source.value && target.value && !checkFile(source.value) && !checkFile(target.value))
 const uploading = computed(() => sync.status === 'uploading')
+const chosen = computed(() => [source.value, target.value].filter(Boolean).length)
 </script>
 
 <template>
-  <section class="step">
+  <AppPanel eyebrow="Bước 1 · Tải file" title="Chọn hai file lịch báo giảng"
+             description="File nguồn cung cấp tên bài và đồ dùng; file đích quyết định thời khóa biểu và định dạng.">
     <div class="pickers">
-      <FilePicker v-model="source" label="File nguồn" hint="Lịch báo giảng của lớp khác, đã có tên bài." :disabled="uploading" />
-      <FilePicker v-model="target" label="File đích" hint="Lịch báo giảng của lớp bạn. Cần có sẵn các sheet tuần copy từ MẪU."
-                  :disabled="uploading" />
+      <FilePicker v-model="source" label="File nguồn" tag="Lớp khác" :disabled="uploading"
+                  hint="Lịch báo giảng đã có tên bài, đồ dùng dạy học." />
+      <FilePicker v-model="target" label="File đích" tag="Lớp của bạn" :disabled="uploading"
+                  hint="Cần có sẵn các sheet tuần copy từ MẪU (xem hướng dẫn bên phải)." />
     </div>
 
-    <p class="muted note">Chỉ hỗ trợ file .xlsx, tối đa 5MB mỗi file.</p>
-
-    <div v-if="uploading" class="progress" role="progressbar" :aria-valuenow="sync.uploadProgress" aria-valuemin="0" aria-valuemax="100">
-      <div class="bar" :style="{ width: `${sync.uploadProgress}%` }"></div>
-      <span>{{ sync.uploadProgress < 100 ? `Đang tải lên… ${sync.uploadProgress}%` : 'Đang đọc file…' }}</span>
+    <div v-if="uploading" class="uploading">
+      <div class="progress-labels small">
+        <span>{{ sync.uploadProgress < 100 ? 'Đang tải lên…' : 'Đang đọc file…' }}</span>
+        <span class="muted">{{ sync.uploadProgress }}%</span>
+      </div>
+      <div class="progress-track" role="progressbar" :aria-valuenow="sync.uploadProgress" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill" :style="{ width: `${sync.uploadProgress}%` }"></div>
+      </div>
     </div>
 
-    <div class="actions">
-      <span></span>
-      <button type="button" :disabled="!ready || uploading" @click="sync.upload(source, target)">
+    <template #footer>
+      <span class="muted small note"><ShieldCheck /> File chỉ dùng để xử lý, tự xóa sau tối đa 60 phút</span>
+      <span class="muted small">{{ chosen }}/2 file đã chọn</span>
+      <button type="button" class="btn btn-primary" :disabled="!ready || uploading" @click="sync.upload(source, target)">
+        <Loader2 v-if="uploading" class="spin" />
         {{ uploading ? 'Đang xử lý…' : 'Tải lên và đọc file' }}
+        <ChevronRight v-if="!uploading" />
       </button>
-    </div>
-  </section>
+    </template>
+  </AppPanel>
 </template>
 
 <style scoped>
-.step {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .pickers {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 16px;
 }
+.uploading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+}
 .note {
-  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.progress {
-  position: relative;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--surface-muted);
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-}
-.progress .bar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--primary-bg);
-  transition: width 0.2s;
-}
-.progress span {
-  position: relative;
-  font-size: 0.875rem;
+.note svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-success);
 }
 </style>

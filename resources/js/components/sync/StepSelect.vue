@@ -1,156 +1,335 @@
 <script setup>
 import { computed } from 'vue'
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Info, Loader2 } from 'lucide-vue-next'
 import { useSyncStore } from '../../stores/sync'
-import { TARGET_STATUS } from '../../utils/timetable'
+import { TARGET_STATUS, unavailableGroups } from '../../utils/timetable'
+import AppPanel from '../ui/AppPanel.vue'
 
 const sync = useSyncStore()
 
 const weeks = computed(() => sync.job?.weeks ?? [])
 const subjects = computed(() => sync.job?.subjects ?? [])
+const defaults = computed(() => sync.job?.default_selected_subjects ?? [])
+const reasons = computed(() => unavailableGroups(weeks.value))
 const canAnalyze = computed(() => sync.selectedWeeks.length > 0 && sync.selectedSubjects.length > 0 && !sync.busy)
 
-function badgeTone(week) {
-  if (week.selectable) return 'ok'
-  return week.target_status === 'missing' || week.target_status === 'has_data' ? 'warn' : 'error'
+function tileClass(week) {
+  if (!week.selectable) return `off ${week.target_status}`
+  return sync.selectedWeeks.includes(week.week_number) ? 'selected' : 'ready'
 }
 
-function setWeeks(all) {
-  sync.selectedWeeks = all ? [...sync.selectableWeeks] : []
+function toggleWeek(week) {
+  if (!week.selectable) return
+  const n = week.week_number
+  sync.selectedWeeks = sync.selectedWeeks.includes(n) ? sync.selectedWeeks.filter((w) => w !== n) : [...sync.selectedWeeks, n]
 }
 
-function setSubjects(all) {
-  sync.selectedSubjects = all ? [...subjects.value] : []
+function toggleSubject(subject) {
+  sync.selectedSubjects = sync.selectedSubjects.includes(subject)
+    ? sync.selectedSubjects.filter((s) => s !== subject)
+    : [...sync.selectedSubjects, subject]
 }
 </script>
 
 <template>
-  <section class="step">
-    <div class="card">
-      <div class="head">
-        <h2>Tuần cần đồng bộ</h2>
+  <AppPanel eyebrow="Bước 2 · Chọn tuần và môn" title="Đồng bộ tuần nào, môn nào?"
+             description="Chỉ chọn được tuần đã có sheet trống trong file đích. Môn không tích sẽ giữ nguyên như file đích.">
+    <section class="group">
+      <div class="group-head">
+        <h3>Tuần <span class="muted count">{{ sync.selectedWeeks.length }}/{{ sync.selectableWeeks.length }} đã chọn</span></h3>
         <div class="bulk">
-          <button type="button" class="link" @click="setWeeks(true)">Chọn tất cả</button>
-          <button type="button" class="link" @click="setWeeks(false)">Bỏ chọn</button>
+          <button type="button" class="btn btn-link" @click="sync.selectedWeeks = [...sync.selectableWeeks]">Chọn tất cả</button>
+          <button type="button" class="btn btn-link" @click="sync.selectedWeeks = []">Bỏ chọn</button>
         </div>
       </div>
-      <p class="muted small">
-        Tệp: <strong>{{ sync.job.source_file_name }}</strong> → <strong>{{ sync.job.target_file_name }}</strong>
-      </p>
-      <ul class="weeks">
-        <li v-for="week in weeks" :key="week.week_number" :class="{ disabled: !week.selectable }">
-          <label>
-            <input v-model="sync.selectedWeeks" type="checkbox" :value="week.week_number" :disabled="!week.selectable" />
-            <span class="week-name">Tuần {{ week.week_number }}</span>
-            <span class="badge" :class="badgeTone(week)">{{ TARGET_STATUS[week.target_status] ?? week.target_status }}</span>
-          </label>
-          <p v-for="err in week.errors" :key="err.code" class="reason">{{ err.message }}</p>
+
+      <div class="tiles weeks">
+        <button v-for="week in weeks" :key="week.week_number" type="button" class="tile" :class="tileClass(week)"
+                :disabled="!week.selectable" :aria-pressed="sync.selectedWeeks.includes(week.week_number)"
+                :title="week.selectable ? `Tuần ${week.week_number}` : `Tuần ${week.week_number}: ${TARGET_STATUS[week.target_status] ?? ''}`"
+                @click="toggleWeek(week)">
+          <span class="tile-label">Tuần</span>
+          <span class="tile-num">{{ week.week_number }}</span>
+        </button>
+      </div>
+
+      <div class="legend small">
+        <span><i class="sw selected"></i>Đã chọn</span>
+        <span><i class="sw ready"></i>Sẵn sàng</span>
+        <span><i class="sw missing"></i>Chưa có sheet</span>
+        <span><i class="sw has_data"></i>Đã có dữ liệu</span>
+      </div>
+
+      <ul v-if="reasons.length" class="reasons">
+        <li v-for="r in reasons" :key="r.title + r.text" :class="r.tone">
+          <AlertTriangle v-if="r.tone !== 'gray'" /><Info v-else />
+          <span><strong>{{ r.title }}:</strong> {{ r.text }}</span>
         </li>
       </ul>
-      <p v-if="sync.selectableWeeks.length === 0" class="alert alert-warn">
-        Chưa có tuần nào sẵn sàng. Hãy copy sheet MẪU thành các sheet tuần trong file đích (xem hướng dẫn ở trên) rồi tải lại file.
+      <p v-if="sync.selectableWeeks.length === 0" class="callout warn">
+        <AlertTriangle />
+        <span>Chưa có tuần nào sẵn sàng. Hãy copy sheet MẪU thành các sheet tuần trong file đích (xem hướng dẫn) rồi tải lại file.</span>
       </p>
-    </div>
+    </section>
 
-    <div class="card">
-      <div class="head">
-        <h2>Môn cần đồng bộ</h2>
+    <section class="group">
+      <div class="group-head">
+        <h3>Môn <span class="muted count">{{ sync.selectedSubjects.length }}/{{ subjects.length }} đã chọn</span></h3>
         <div class="bulk">
-          <button type="button" class="link" @click="setSubjects(true)">Chọn tất cả</button>
-          <button type="button" class="link" @click="setSubjects(false)">Bỏ chọn</button>
+          <button type="button" class="btn btn-link" @click="sync.selectedSubjects = [...subjects]">Chọn tất cả</button>
+          <button type="button" class="btn btn-link" @click="sync.selectedSubjects = subjects.filter((s) => defaults.includes(s))">Mặc định</button>
+          <button type="button" class="btn btn-link" @click="sync.selectedSubjects = []">Bỏ chọn</button>
         </div>
       </div>
-      <p class="muted small">Môn nào được tích thì mới được điền. Môn không tích giữ nguyên như trong file đích.</p>
       <div class="subjects">
-        <label v-for="subject in subjects" :key="subject" class="chip" :class="{ on: sync.selectedSubjects.includes(subject) }">
-          <input v-model="sync.selectedSubjects" type="checkbox" :value="subject" />
-          {{ subject }}
-        </label>
+        <button v-for="subject in subjects" :key="subject" type="button" class="option"
+                :class="{ on: sync.selectedSubjects.includes(subject) }" role="checkbox"
+                :aria-checked="sync.selectedSubjects.includes(subject)" @click="toggleSubject(subject)">
+          <span class="box"><Check /></span>
+          <span class="option-text">{{ subject }}</span>
+        </button>
       </div>
-    </div>
+      <p class="muted small">“Mặc định” bỏ các môn giáo viên bộ môn dạy. Lựa chọn của bạn được nhớ cho lần sau.</p>
+    </section>
 
-    <div class="actions">
-      <button type="button" class="secondary" :disabled="sync.busy" @click="sync.startOver()">Chọn file khác</button>
-      <button type="button" :disabled="!canAnalyze" @click="sync.analyze()">
-        {{ sync.status === 'analyzing' ? 'Đang phân tích…' : 'Phân tích và xem trước' }}
+    <template #footer>
+      <button type="button" class="btn btn-secondary" :disabled="sync.busy" @click="sync.startOver()">
+        <ChevronLeft /> Chọn file khác
       </button>
-    </div>
-  </section>
+      <span class="muted small">{{ sync.selectedWeeks.length }} tuần · {{ sync.selectedSubjects.length }} môn</span>
+      <button type="button" class="btn btn-primary" :disabled="!canAnalyze" @click="sync.analyze()">
+        <Loader2 v-if="sync.status === 'analyzing'" class="spin" />
+        {{ sync.status === 'analyzing' ? 'Đang phân tích…' : 'Phân tích và xem trước' }}
+        <ChevronRight v-if="sync.status !== 'analyzing'" />
+      </button>
+    </template>
+  </AppPanel>
 </template>
 
 <style scoped>
-.step {
+.group {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
-.head {
+.group + .group {
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+.group-head {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
 }
+.count {
+  font-weight: 400;
+  font-size: 0.8125rem;
+  margin-left: 6px;
+}
 .bulk {
   display: flex;
   gap: 16px;
 }
-.small {
-  font-size: 0.875rem;
-  margin: 4px 0 12px;
-  overflow-wrap: anywhere;
+
+/* Week tiles (like the question grid) */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 10px;
 }
-.weeks {
+.tile {
+  font: inherit;
+  position: relative;
+  height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.tile-label {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tile-num {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.tile.ready:hover {
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
+}
+.tile.selected {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-primary-strong);
+}
+.tile.selected .tile-label {
+  color: var(--color-primary);
+}
+.tile.off {
+  cursor: not-allowed;
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+  border-style: dashed;
+}
+.tile.off::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-danger);
+}
+.tile.missing::after {
+  background: var(--color-warning);
+}
+.tile.has_data::after {
+  background: var(--color-text-subtle);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--color-text-muted);
+}
+.legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+}
+.sw.selected {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+.sw.missing,
+.sw.has_data {
+  border-style: dashed;
+  background: var(--color-surface-muted);
+  position: relative;
+}
+.sw.missing::after,
+.sw.has_data::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+.sw.has_data::after {
+  background: var(--color-text-subtle);
+}
+
+.reasons {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
-}
-.weeks li {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.weeks li.disabled {
-  background: var(--surface-muted);
-}
-.weeks label {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  cursor: pointer;
 }
-.weeks li.disabled label {
-  cursor: not-allowed;
-  color: var(--muted);
-}
-.week-name {
-  font-weight: 600;
-  flex: 1;
-}
-.reason {
-  margin: 4px 0 0 24px;
+.reasons li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
   font-size: 0.8125rem;
-  color: var(--muted);
+  color: var(--color-text-secondary);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
 }
+.reasons svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--color-text-muted);
+}
+.reasons .amber {
+  background: var(--color-warning-soft);
+}
+.reasons .amber svg {
+  color: var(--color-warning);
+}
+.reasons .red {
+  background: var(--color-danger-soft);
+}
+.reasons .red svg {
+  color: var(--color-danger);
+}
+
+/* Subject options (like answer choices) */
 .subjects {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
   gap: 8px;
 }
-.chip {
-  display: inline-flex;
+.option {
+  font: inherit;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  text-align: left;
   cursor: pointer;
-  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
 }
-.chip.on {
-  border-color: var(--primary);
-  background: var(--primary-bg);
+.option:hover {
+  border-color: var(--color-primary-border);
+}
+.box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border-strong);
+  display: grid;
+  place-items: center;
+  color: transparent;
+}
+.box svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 3;
+}
+.option.on {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-strong);
+  font-weight: 500;
+}
+.option.on .box {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
 }
 </style>

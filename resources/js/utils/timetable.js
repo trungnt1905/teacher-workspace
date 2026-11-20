@@ -87,6 +87,29 @@ export function toggleDayOff(overrides, weekNumber, day, currentState) {
   return [...rest, { week_number: weekNumber, day, is_day_off: currentState === 'on' }]
 }
 
+/**
+ * Reasons why weeks cannot be selected, grouped so that "missing sheet" for 8 weeks is one line
+ * ("Tuần 1, 2, 3…") instead of 8 identical messages. Other problems keep their own message.
+ */
+export function unavailableGroups(weeks) {
+  const grouped = { missing: [], has_data: [] }
+  const others = []
+  for (const w of weeks ?? []) {
+    if (w.selectable) continue
+    if (w.target_status in grouped && w.errors.length <= 1) grouped[w.target_status].push(w.week_number)
+    else others.push(...w.errors.map((e) => ({ tone: 'red', title: `Tuần ${w.week_number}`, text: e.message })))
+  }
+  const list = (nums) => nums.map((n) => `Tuần ${n}`).join(', ')
+  const groups = []
+  if (grouped.missing.length) {
+    groups.push({ tone: 'amber', title: 'Chưa có sheet trong file đích', text: `${list(grouped.missing)} — copy sheet MẪU thành sheet tuần rồi tải lại file đích.` })
+  }
+  if (grouped.has_data.length) {
+    groups.push({ tone: 'gray', title: 'Sheet đã có dữ liệu (bỏ qua)', text: `${list(grouped.has_data)} — muốn làm lại thì xóa sheet đó và copy lại từ MẪU.` })
+  }
+  return [...groups, ...others]
+}
+
 /** Number of subjects (across weeks) that the teacher has to fill by hand. */
 export function skippedCount(analysis) {
   return (analysis?.weeks ?? []).reduce(

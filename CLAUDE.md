@@ -16,6 +16,7 @@ Single Laravel app at the repo root serves both the UI and the API (same origin,
 - `app/Services/Timetable/` — `JobStore` (job dirs, meta.json, ownership, expiry, locking) and `PythonEngine` (runs the CLI, maps exit codes to `ApiException`).
 - The `api` middleware group has cookies + session + CSRF prepended (`bootstrap/app.php`); all API errors use `{success:false,error:{code,message,details}}`.
 - Laravel feature tests call the real Python engine with the fixtures; they need `python/.venv`.
+- `resources/css/tokens.css` + `components.css`, `resources/js/components/ui/` — design system (docs/design-system.md).
 - `resources/js/stores/sync.js` drives the 4-step wizard (§10.3 statuses); pure logic lives in `resources/js/utils/timetable.js` (tested in `tests/js/`).
 - `Dockerfile`, `docker/`, `render.yaml` — single Render Free Docker service (Nginx + PHP-FPM + Python venv `/opt/venv`); deploy guide in `docs/deployment.md`.
 - `docs/phase0/` — Phase 0 prototype and its outputs (reference only, not production code).
@@ -48,3 +49,4 @@ php artisan serve & npm run dev                    # local dev at http://127.0.0
 13. Unit + integration tests are required. Do not mark work done without running them.
 14. Ask when a requirement is unclear instead of assuming. Keep code readable; no abstraction for a single use.
 15. Update README and docs at the end of each phase.
+16. UI follows [docs/design-system.md](docs/design-system.md): colours only via semantic `--color-*` tokens from `resources/css/tokens.css` (no hex/rgb, no palette tokens in components); reuse `.btn`/`.card`/`.pill`/`.callout`/`.icon-tile` and `components/ui/` (`PageHeader`, `AppPanel`); icons from `lucide-vue-next`. Desktop browsers only — no phone layouts. `npm test` enforces the colour rules.

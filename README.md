@@ -16,7 +16,7 @@ Một ứng dụng Laravel phục vụ cả giao diện lẫn API (cùng domain)
 | `resources/js/` | Giao diện Vue 3 SPA (vue-router, pinia), build bằng Vite |
 | `resources/views/app.blade.php` | Khung SPA, trả về cho mọi đường dẫn không phải `/api` |
 | `python/` | Bộ xử lý Excel (openpyxl để đọc, sửa XML trực tiếp để ghi) |
-| `docs/` | Tài liệu thiết kế, kết quả Phase 0 |
+| `docs/` | Tài liệu thiết kế, [hệ thống giao diện](docs/design-system.md), triển khai, kết quả Phase 0 |
 
 ## Yêu cầu
 

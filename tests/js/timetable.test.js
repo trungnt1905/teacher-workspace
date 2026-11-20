@@ -10,6 +10,7 @@ import {
   subjectStatus,
   todoText,
   toggleDayOff,
+  unavailableGroups,
 } from '../../resources/js/utils/timetable.js'
 
 function memoryStorage(initial = {}) {
@@ -86,6 +87,26 @@ describe('days off', () => {
     overrides = toggleDayOff(overrides, 8, 'Sáu', 'partial')
     expect(overrides).toHaveLength(2)
     expect(overrides[1]).toEqual({ week_number: 8, day: 'Sáu', is_day_off: false })
+  })
+})
+
+describe('unavailable weeks', () => {
+  it('groups missing / has-data weeks and keeps other errors separate', () => {
+    const weeks = [
+      { week_number: 1, selectable: false, target_status: 'missing', errors: [{ message: 'x' }] },
+      { week_number: 2, selectable: false, target_status: 'missing', errors: [{ message: 'x' }] },
+      { week_number: 3, selectable: false, target_status: 'has_data', errors: [{ message: 'y' }] },
+      { week_number: 4, selectable: false, target_status: 'invalid_structure', errors: [{ message: 'Sai cấu trúc' }] },
+      { week_number: 8, selectable: true, target_status: 'ready', errors: [] },
+    ]
+    const groups = unavailableGroups(weeks)
+    expect(groups.map((g) => g.title)).toEqual(['Chưa có sheet trong file đích', 'Sheet đã có dữ liệu (bỏ qua)', 'Tuần 4'])
+    expect(groups[0].text).toMatch(/^Tuần 1, Tuần 2 — /)
+    expect(groups[2].text).toBe('Sai cấu trúc')
+  })
+
+  it('returns nothing when every week is selectable', () => {
+    expect(unavailableGroups([{ week_number: 1, selectable: true, errors: [] }])).toEqual([])
   })
 })
 

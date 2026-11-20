@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { AlertTriangle, BookOpenCheck, Loader2 } from 'lucide-vue-next'
 import { apiError, errorText } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 
@@ -31,47 +32,67 @@ async function submit() {
 
 <template>
   <main class="login">
-    <form class="card" @submit.prevent="submit">
-      <h1>Teacher Workspace</h1>
-      <p class="muted">Đăng nhập để tiếp tục</p>
-      <label>
+    <form class="card login-card" @submit.prevent="submit">
+      <div class="head">
+        <span class="icon-tile blue"><BookOpenCheck /></span>
+        <div>
+          <h1>Teacher Workspace</h1>
+          <p class="muted">Đăng nhập để tiếp tục</p>
+        </div>
+      </div>
+
+      <label class="field">
         Email
-        <input v-model="email" type="email" autocomplete="username" required autofocus />
+        <input v-model="email" class="input" type="email" autocomplete="username" placeholder="ten@example.com" required autofocus />
       </label>
-      <label>
+      <label class="field">
         Mật khẩu
-        <input v-model="password" type="password" autocomplete="current-password" required />
+        <input v-model="password" class="input" type="password" autocomplete="current-password" placeholder="••••••••••" required />
       </label>
-      <p v-if="error" class="alert alert-error" role="alert">{{ error }}</p>
-      <button type="submit" :disabled="busy">{{ busy ? 'Đang đăng nhập…' : 'Đăng nhập' }}</button>
+
+      <p v-if="error" class="callout error" role="alert"><AlertTriangle />{{ error }}</p>
+
+      <button type="submit" class="btn btn-primary btn-lg" :disabled="busy">
+        <Loader2 v-if="busy" class="spin" />
+        {{ busy ? 'Đang đăng nhập…' : 'Đăng nhập' }}
+      </button>
     </form>
+    <p class="muted small foot">Hệ thống dành cho giáo viên · Dữ liệu tải lên được xóa sau khi xử lý</p>
   </main>
 </template>
 
 <style scoped>
 .login {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 16px;
+  background:
+    radial-gradient(circle at 20% 0%, var(--color-primary-soft), transparent 45%),
+    radial-gradient(circle at 100% 100%, var(--color-action-soft), transparent 40%),
+    var(--color-bg);
 }
-.card {
+.login-card {
   width: 100%;
-  max-width: 380px;
+  max-width: 400px;
+  padding: 32px 28px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
 }
-h1 {
-  margin: 0;
-}
-.muted {
-  margin: -8px 0 4px;
-}
-label {
+.head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-weight: 500;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+.head h1 {
+  font-size: 1.25rem;
+}
+.foot {
+  text-align: center;
 }
 </style>

@@ -2,7 +2,7 @@
 
 ## Detail Design — Kiến trúc và đặc tả kỹ thuật MVP
 
-- **Phiên bản tài liệu:** 1.9
+- **Phiên bản tài liệu:** 1.10
 - **Ngày:** 19/11/2026
 - **Trạng thái:** Bản thiết kế đề xuất để triển khai MVP
 - **Ngôn ngữ:** Tiếng Việt
@@ -22,6 +22,7 @@
 | 1.7 | 19/11/2026 | Phase 3 hoàn thành: Laravel API (auth một tài khoản từ env, upload/analyze/generate/download, quản lý job, định dạng lỗi thống nhất, mã lỗi mới), múi giờ Asia/Ho_Chi_Minh, lệnh `admin:password`. |
 | 1.8 | 20/11/2026 | Phase 4 hoàn thành: giao diện đăng nhập và wizard 4 bước; upload trả thêm `days`; khôi phục job sau khi tải lại trang; Vitest cho frontend. |
 | 1.9 | 20/11/2026 | Phase 5 (phần trong repo): Dockerfile, cấu hình `docker/`, `render.yaml`, `docs/deployment.md`; trust proxy; `PreventRequestForgery`; không log lỗi nghiệp vụ. Còn bước tạo service trên Render do người dùng làm. |
+| 1.10 | 20/11/2026 | Thiết kế lại giao diện (thẻ trắng, bố cục 2 cột, lưới ô tuần, icon Lucide, font Inter) và thêm hệ thống giao diện: `tokens.css` (màu 2 lớp), `components.css`, `components/ui/`, `docs/design-system.md`, test chặn màu viết cứng. |
 
 ------------------------------------------------------------------------
 
@@ -68,7 +69,7 @@ Teacher Workspace là workspace trực tuyến giúp giáo viên quản lý và 
 
 - Một giáo viên tiểu học.
 - Trước mắt sử dụng cá nhân, không cần quy trình phê duyệt nhiều cấp.
-- Người dùng truy cập qua trình duyệt trên máy tính hoặc điện thoại.
+- Người dùng truy cập qua trình duyệt trên **máy tính** (không hỗ trợ giao diện riêng cho điện thoại — người dùng xác nhận 20/11/2026).
 - Giao diện và hướng dẫn sử dụng bằng tiếng Việt.
 
 ## 2.3. Nguyên tắc thiết kế
@@ -1191,6 +1192,8 @@ Không trả stack trace, đường dẫn nội bộ, secret hoặc thông tin s
 
 # 10. Thiết kế frontend
 
+Giao diện tuân theo hệ thống giao diện chung: [docs/design-system.md](design-system.md) (màu theo vai trò trong `resources/css/tokens.css`, thành phần dùng chung, bố cục 2 cột `PageHeader` + `AppPanel` + cột phụ).
+
 ## 10.1. Trang chính
 
 Dashboard MVP đơn giản:
@@ -1588,7 +1591,7 @@ Theo ba mức ở mục 5.4:
 
 ## 16.5. Test end-to-end
 
-Trên browser (máy tính và điện thoại):
+Trên trình duyệt máy tính:
 
 1. Đăng nhập.
 2. Upload nguồn và đích.
@@ -1770,7 +1773,7 @@ Thay đổi ứng dụng kèm theo: `trustProxies(at: '*')` (IP thật cho giớ
 4. Private download.
 5. Cleanup.
 6. Kiểm thử workbook thật.
-7. Kiểm thử trên máy tính và điện thoại.
+7. Kiểm thử trên trình duyệt máy tính (Chrome, Edge).
 8. Kiểm tra backup source code và cấu hình.
 9. Viết `docs/user-guide.md` cho giáo viên.
 

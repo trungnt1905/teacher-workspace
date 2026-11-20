@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted } from 'vue'
-import StepIndicator from '../components/sync/StepIndicator.vue'
+import { AlertTriangle } from 'lucide-vue-next'
 import StepPreview from '../components/sync/StepPreview.vue'
 import StepResult from '../components/sync/StepResult.vue'
 import StepSelect from '../components/sync/StepSelect.vue'
 import StepUpload from '../components/sync/StepUpload.vue'
-import SyncGuide from '../components/sync/SyncGuide.vue'
+import SyncHeader from '../components/sync/SyncHeader.vue'
+import SyncSidebar from '../components/sync/SyncSidebar.vue'
 import { errorText } from '../services/api'
 import { useSyncStore } from '../stores/sync'
 
@@ -22,27 +23,45 @@ const errorMessage = computed(() => {
 </script>
 
 <template>
-  <section class="page">
-    <h1>Đồng bộ lịch báo giảng</h1>
-    <SyncGuide />
-    <StepIndicator :step="sync.step" />
+  <div class="sync-page">
+    <SyncHeader />
 
-    <p v-if="errorMessage" class="alert alert-error" role="alert">{{ errorMessage }}</p>
+    <div class="layout">
+      <div class="main">
+        <p v-if="errorMessage" class="callout error" role="alert"><AlertTriangle /><span>{{ errorMessage }}</span></p>
 
-    <StepUpload v-if="sync.step === 1" />
-    <StepSelect v-else-if="sync.step === 2" />
-    <StepPreview v-else-if="sync.step === 3 && sync.analysis" />
-    <StepResult v-else-if="sync.step === 4 && sync.result" />
-  </section>
+        <StepUpload v-if="sync.step === 1" />
+        <StepSelect v-else-if="sync.step === 2" />
+        <StepPreview v-else-if="sync.step === 3 && sync.analysis" />
+        <StepResult v-else-if="sync.step === 4 && sync.result" />
+      </div>
+
+      <SyncSidebar />
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.page {
+.sync-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+.main {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
-h1 {
-  margin: 0;
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>
