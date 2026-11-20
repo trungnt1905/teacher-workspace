@@ -45,6 +45,8 @@ def test_empty_lesson_skips_subject_with_warning():
     assert status(result) == {"HĐTN (SHDC)": "skipped_empty_lesson", "Toán": "matched"}
     assert "E3" not in result.writes
     assert result.warnings[0]["code"] == "EMPTY_LESSON"
+    assert result.warnings[0]["message"] == (
+        "Tuần 1, môn HĐTN (SHDC): file nguồn chưa có tên bài ở thứ Hai tiết 1 — môn này không được điền.")
 
 
 def test_keyword_nghi_marks_period_off():

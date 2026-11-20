@@ -912,7 +912,7 @@ Schema minh họa (cần định nghĩa schema chính thức và validate ở c�
         }
       ],
       "warnings": [
-        { "code": "AFFECTED_BY_DAY_OFF", "message": "Tuần 7, môn Toán: nguồn nghỉ Năm tiết 3; đích có tiết vào buổi nghỉ (Năm tiết 2) — cần điền thủ công.", "details": {} }
+        { "code": "AFFECTED_BY_DAY_OFF", "message": "Tuần 7, môn Toán: nguồn nghỉ thứ Năm tiết 3; đích có tiết vào buổi nghỉ (thứ Năm tiết 2) — cần điền thủ công.", "details": {} }
       ],
       "writes": { "A1": " TUẦN 07 (Từ 19/10/2026 đến 23/10/2026)", "E9": "Vai trò của năng lượng (Tiết 1)", "F9": "Phấn màu" }
     }

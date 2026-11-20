@@ -27,7 +27,7 @@ class WeekMatch:
 
 
 def _where(slots: list[Slot]) -> str:
-    return ", ".join(f"{s.day} tiết {s.period or '?'}" for s in slots)
+    return ", ".join(f"thứ {s.day} tiết {s.period or '?'}" for s in slots)
 
 
 def match_week(
@@ -115,7 +115,7 @@ def match_week(
             if s.lesson and len(s.lesson) > lesson_max_chars:
                 result.warnings.append(issue(
                     "CONTENT_TOO_LONG",
-                    f"Tuần {week_no}, {t.day} tiết {t.period} ({subject}): tên bài dài, có thể bị khuất trong ô.",
+                    f"Tuần {week_no}, thứ {t.day} tiết {t.period} ({subject}): tên bài dài, có thể bị khuất trong ô.",
                     week=week_no, cell=t.lesson_cell))
             entry["items"].append(item)
         result.subjects.append(entry)
