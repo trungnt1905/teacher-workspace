@@ -1,0 +1,20 @@
+{
+  "subjects": [
+    "Tiếng Việt", "Toán", "Tiếng Anh", "Khoa học", "GDTC",
+    "Lịch sử & Địa lí", "Âm nhạc", "Mỹ thuật", "Tin học", "Công nghệ",
+    "Đạo đức", "HĐTN", "HĐTN (SHDC)", "HĐTN (SHL)", "GDTC chung",
+    "HĐTV", "HĐTT"
+  ],
+  "subject_aliases": {
+    "Mĩ thuật": "Mỹ thuật",
+    "LS&ĐL": "Lịch sử & Địa lí"
+  },
+  "default_excluded_subjects": [
+    "Tiếng Anh", "Tin học", "Âm nhạc", "Mỹ thuật",
+    "Công nghệ", "GDTC", "Lịch sử & Địa lí", "HĐTV/HĐTT"
+  ],
+  "interchangeable_groups": [
+    { "key": "HĐTV/HĐTT", "members": ["HĐTV", "HĐTT", "HĐTV/HĐTT"] }
+  ],
+  "day_off_keywords": ["nghỉ"]
+}

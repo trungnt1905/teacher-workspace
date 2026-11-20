@@ -1,0 +1,34 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec) — see docs/deployment.md.
+# One free Docker web service serving the Vue UI + Laravel API + Python engine.
+services:
+  - type: web
+    name: teacher-workspace
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      # Secrets: entered once in the Render dashboard, never committed (DETAIL_DESIGN §12.4).
+      - key: APP_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      # Non-secret settings (defaults also baked into the Dockerfile).
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_TIMEZONE
+        value: Asia/Ho_Chi_Minh
+      - key: LOG_LEVEL
+        value: info
+      - key: SESSION_LIFETIME
+        value: "10080"
+      - key: TIMETABLE_MAX_FILE_SIZE_MB
+        value: "5"
+      - key: TIMETABLE_JOB_TTL_MINUTES
+        value: "60"

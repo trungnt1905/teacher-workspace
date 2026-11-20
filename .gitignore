@@ -1,0 +1,44 @@
+# Secrets — never commit (DETAIL_DESIGN §12.4)
+.env
+.env.*
+!.env.example
+/auth.json
+
+# Dependencies / build output
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+
+# Laravel / PHP tooling
+*.log
+.phpunit.result.cache
+/.phpunit.cache
+.phpactor.json
+_ide_helper.php
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Timetable job files (uploads/results) must never be committed
+/storage/app/private/timetable-jobs/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+/.idea
+/.vscode
+/.zed
+/.cursor/
+/.codex
+*.swp
+
+# Office lock files
+~$*.xlsx
+.~lock.*#

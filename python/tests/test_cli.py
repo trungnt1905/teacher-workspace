@@ -1,0 +1,216 @@
+"""End-to-end tests through the CLI, exactly as Laravel will call it (DETAIL_DESIGN §8.3)."""
+
+import json
+import shutil
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+import openpyxl
+import pytest
+
+from conftest import FIXTURES
+
+SCRIPT = Path(__file__).resolve().parent.parent / "process_timetable.py"
+
+
+def run(*args):
+    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+
+
+def job(tmp_path, source="lbg_mau.xlsx", target="tuan8_lop_dich.xlsx") -> Path:
+    shutil.copy(FIXTURES / source, tmp_path / "source.xlsx")
+    shutil.copy(FIXTURES / target, tmp_path / "target.xlsx")
+    return tmp_path
+
+
+def request(job_dir, **req):
+    req.setdefault("manual_days_off", [])
+    (job_dir / "request.json").write_text(json.dumps(req, ensure_ascii=False), encoding="utf-8")
+
+
+def read(job_dir, name):
+    return json.loads((job_dir / name).read_text(encoding="utf-8"))
+
+
+def cli(command, job_dir, expect=0):
+    result = run(command, "--job-dir", str(job_dir))
+    assert result.returncode == expect, result.stderr
+    assert result.stdout == ""  # stdout is never a result channel
+    return result
+
+
+# --- contract -------------------------------------------------------------------------------------
+
+def test_check_reports_dependencies_and_config():
+    result = run("check")
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["status"] == "ok"
+    assert data["slots_per_week"] == 32
+
+
+def test_job_command_requires_existing_job_dir(tmp_path):
+    result = run("analyze", "--job-dir", str(tmp_path / "missing"))
+    assert result.returncode == 2
+    assert json.loads(result.stderr.splitlines()[-1])["event"] == "job_dir_missing"
+
+
+def test_business_error_is_written_to_result_file(tmp_path):
+    job(tmp_path)
+    (tmp_path / "target.xlsx").write_bytes(b"not a zip")
+    cli("list-weeks", tmp_path, expect=1)
+    assert read(tmp_path, "weeks.json")["error"]["code"] == "INVALID_FILE_TYPE"
+
+
+def test_missing_template_sheet(tmp_path):
+    job(tmp_path)
+    wb_path = tmp_path / "target.xlsx"
+    wb = openpyxl.load_workbook(wb_path)  # throwaway copy; openpyxl save is fine for building test input
+    wb["MẪU"].title = "KHAC"
+    wb.save(wb_path)
+    cli("list-weeks", tmp_path, expect=1)
+    assert read(tmp_path, "weeks.json")["error"]["code"] == "TEMPLATE_SHEET_MISSING"
+
+
+# --- list-weeks -----------------------------------------------------------------------------------
+
+def test_list_weeks_statuses_and_subjects(tmp_path):
+    cli("list-weeks", job(tmp_path))
+    data = read(tmp_path, "weeks.json")
+    statuses = {w["week_number"]: w["target_status"] for w in data["weeks"]}
+    assert statuses == {**{n: "missing" for n in range(1, 10)}, 8: "ready"}
+    assert [w["week_number"] for w in data["weeks"] if w["selectable"]] == [8]
+    assert "HĐTV/HĐTT" in data["subjects"] and "HĐTV" not in data["subjects"]
+    assert data["days"][0] == {"label": "Hai", "sessions": ["SÁNG", "CHIỀU"]}
+    assert [d["label"] for d in data["days"]] == ["Hai", "Ba", "Tư", "Năm", "Sáu"]
+    assert set(data["default_selected_subjects"]) == {
+        "Tiếng Việt", "Toán", "Khoa học", "Đạo đức", "HĐTN", "HĐTN (SHDC)", "HĐTN (SHL)", "GDTC chung"}
+
+
+# --- analyze + generate ---------------------------------------------------------------------------
+
+def full_run(tmp_path, subjects):
+    job(tmp_path)
+    request(tmp_path, weeks=[8], selected_subjects=subjects)
+    cli("analyze", tmp_path)
+    cli("generate", tmp_path)
+    return read(tmp_path, "analysis.json"), read(tmp_path, "generate.json")
+
+
+def test_week_8_all_subjects(tmp_path):
+    cli("list-weeks", job(tmp_path))
+    subjects = read(tmp_path, "weeks.json")["subjects"]
+    analysis, gen = full_run(tmp_path, subjects)
+
+    week = analysis["weeks"][0]
+    statuses = {s["subject"]: s["status"] for s in week["subjects"]}
+    assert statuses.pop("HĐTN (SHDC)") == "skipped_empty_lesson"
+    assert set(statuses.values()) == {"matched"}
+    assert gen["weeks_filled"] == [8]
+    assert [t["code"] for t in gen["manual_todo"]] == ["EMPTY_LESSON"]
+
+    out = openpyxl.load_workbook(tmp_path / "result.xlsx")["TUẦN 8"]
+    src = openpyxl.load_workbook(FIXTURES / "lbg_mau.xlsx")["TUẦN 8"]
+    # Toán: source rows 7,15,21,25,32 -> target rows 6,13,21,24,32 (target's own timetable)
+    for s_row, t_row in zip([7, 15, 21, 25, 32], [6, 13, 21, 24, 32]):
+        assert out[f"E{t_row}"].value.strip() == src[f"E{s_row}"].value.strip()
+    assert out["D30"].value == "HĐTT"           # group rename (§4.10)
+    assert out["A1"].value == src["A1"].value   # header copied verbatim
+    assert out["E35"].value == src["E35"].value
+
+
+def test_week_8_default_subjects_leaves_specialist_subjects_untouched(tmp_path):
+    analysis, _ = full_run(tmp_path, ["Tiếng Việt", "Toán", "Khoa học", "Đạo đức", "HĐTN", "HĐTN (SHL)", "GDTC chung"])
+    out = openpyxl.load_workbook(tmp_path / "result.xlsx")["TUẦN 8"]
+    target = openpyxl.load_workbook(FIXTURES / "tuan8_lop_dich.xlsx")["TUẦN 8"]
+    for row in range(3, 35):
+        if target[f"D{row}"].value in ("Tiếng Anh", "Tin học ", "Âm nhạc", "Mỹ thuật", "GDTC", "Công nghệ",
+                                       "Lịch sử & Địa lí", "HĐTV/HĐTT"):
+            assert out[f"E{row}"].value == target[f"E{row}"].value
+            assert out[f"D{row}"].value == target[f"D{row}"].value
+
+
+def test_only_patched_sheet_changes_and_styles_kept(tmp_path):
+    full_run(tmp_path, ["Toán"])
+    with zipfile.ZipFile(tmp_path / "target.xlsx") as a, zipfile.ZipFile(tmp_path / "result.xlsx") as b:
+        assert a.namelist() == b.namelist()
+        changed = [n for n in a.namelist() if a.read(n) != b.read(n)]
+    assert changed == ["xl/worksheets/sheet2.xml"]  # TUẦN 8 only
+
+
+def test_inputs_are_never_modified(tmp_path):
+    full_run(tmp_path, ["Toán"])
+    assert (tmp_path / "source.xlsx").read_bytes() == (FIXTURES / "lbg_mau.xlsx").read_bytes()
+    assert (tmp_path / "target.xlsx").read_bytes() == (FIXTURES / "tuan8_lop_dich.xlsx").read_bytes()
+
+
+def test_result_used_as_next_target_reports_has_data(tmp_path):
+    full_run(tmp_path, ["Toán"])
+    shutil.copy(tmp_path / "result.xlsx", tmp_path / "target.xlsx")
+    cli("list-weeks", tmp_path)
+    week8 = next(w for w in read(tmp_path, "weeks.json")["weeks"] if w["week_number"] == 8)
+    assert week8["target_status"] == "has_data"
+    assert week8["errors"][0]["code"] == "TARGET_WEEK_HAS_DATA"
+
+
+def test_day_off_week_7_against_target_timetable(tmp_path):
+    """Source TUẦN 7 (Thursday off) into a target sheet with the target class timetable."""
+    job(tmp_path)
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")
+    wb["TUẦN 8"].title = "TUẦN 7"  # pretend the teacher copied MẪU as TUẦN 7 (same timetable)
+    wb.save(tmp_path / "target.xlsx")
+    request(tmp_path, weeks=[7], selected_subjects=["Tiếng Việt", "Toán", "Khoa học", "Đạo đức", "HĐTN",
+                                                     "HĐTN (SHL)", "GDTC chung"])
+    cli("analyze", tmp_path)
+    week = read(tmp_path, "analysis.json")["weeks"][0]
+    assert {(d["day"], d["session"]) for d in week["days_off"]} == {("Năm", "SÁNG"), ("Năm", "CHIỀU")}
+    statuses = {s["subject"]: s["status"] for s in week["subjects"]}
+    assert statuses == {"Tiếng Việt": "skipped_day_off", "Toán": "skipped_day_off", "HĐTN": "skipped_day_off",
+                        "Khoa học": "matched", "Đạo đức": "matched", "HĐTN (SHL)": "matched",
+                        "GDTC chung": "matched"}
+
+
+def test_blocked_weeks_are_reported_not_generated(tmp_path):
+    job(tmp_path)
+    request(tmp_path, weeks=[3, 8], selected_subjects=["Toán"])
+    cli("analyze", tmp_path)
+    weeks = {w["week_number"]: w for w in read(tmp_path, "analysis.json")["weeks"]}
+    assert weeks[3]["status"] == "blocked"
+    assert weeks[3]["errors"][0]["code"] == "TARGET_WEEK_SHEET_MISSING"
+    cli("generate", tmp_path)
+    gen = read(tmp_path, "generate.json")
+    assert gen["weeks_filled"] == [8]
+    assert any(t["code"] == "TARGET_WEEK_SHEET_MISSING" for t in gen["manual_todo"])
+
+
+@pytest.mark.parametrize("change", ["request", "target"])
+def test_generate_refuses_outdated_analysis(tmp_path, change):
+    job(tmp_path)
+    request(tmp_path, weeks=[8], selected_subjects=["Toán"])
+    cli("analyze", tmp_path)
+    if change == "request":
+        request(tmp_path, weeks=[8], selected_subjects=["Toán", "Tiếng Việt"])
+    else:
+        with open(tmp_path / "target.xlsx", "ab") as f:
+            f.write(b"\0")
+    cli("generate", tmp_path, expect=1)
+    assert read(tmp_path, "generate.json")["error"]["code"] == "ANALYSIS_OUTDATED"
+    assert not (tmp_path / "result.xlsx").exists()
+
+
+def test_nothing_to_generate(tmp_path):
+    job(tmp_path)
+    request(tmp_path, weeks=[8], selected_subjects=["HĐTN (SHDC)"])
+    cli("analyze", tmp_path)
+    assert read(tmp_path, "analysis.json")["can_generate"] is False
+    cli("generate", tmp_path, expect=1)
+    assert read(tmp_path, "generate.json")["error"]["code"] == "NOTHING_TO_GENERATE"
+
+
+def test_invalid_request(tmp_path):
+    job(tmp_path)
+    request(tmp_path, weeks=[], selected_subjects=["Toán"])
+    cli("analyze", tmp_path, expect=1)
+    assert read(tmp_path, "analysis.json")["error"]["code"] == "INVALID_REQUEST"

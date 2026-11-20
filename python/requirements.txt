@@ -1,0 +1,4 @@
+# Runtime dependencies (installed in the production Docker image).
+openpyxl==3.1.5     # read workbooks only — never used to save output (DETAIL_DESIGN §5.3)
+lxml==6.1.3         # write cell values by patching sheet XML in place
+defusedxml==0.7.1   # openpyxl uses it automatically to parse untrusted uploads safely
