@@ -102,7 +102,7 @@ export function unavailableGroups(weeks) {
   const list = (nums) => nums.map((n) => `Tuần ${n}`).join(', ')
   const groups = []
   if (grouped.missing.length) {
-    groups.push({ tone: 'amber', title: 'Chưa có sheet trong file đích', text: `${list(grouped.missing)} — copy sheet MẪU thành sheet tuần rồi tải lại file đích.` })
+    groups.push({ tone: 'amber', title: 'Chưa có sheet trong file đích', text: `${list(grouped.missing)} — tạo sheet tuần (copy sheet MẪU hoặc một sheet tuần khác) rồi tải lại file đích.` })
   }
   if (grouped.has_data.length) {
     groups.push({ tone: 'gray', title: 'Sheet đã có dữ liệu (bỏ qua)', text: `${list(grouped.has_data)} — muốn làm lại thì xóa sheet đó và copy lại từ MẪU.` })

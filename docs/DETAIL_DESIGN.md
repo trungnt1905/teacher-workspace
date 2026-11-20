@@ -2,7 +2,7 @@
 
 ## Detail Design — Kiến trúc và đặc tả kỹ thuật MVP
 
-- **Phiên bản tài liệu:** 1.11
+- **Phiên bản tài liệu:** 1.12
 - **Ngày:** 19/11/2026
 - **Trạng thái:** Bản thiết kế đề xuất để triển khai MVP
 - **Ngôn ngữ:** Tiếng Việt
@@ -24,6 +24,7 @@
 | 1.9 | 20/11/2026 | Phase 5 (phần trong repo): Dockerfile, cấu hình `docker/`, `render.yaml`, `docs/deployment.md`; trust proxy; `PreventRequestForgery`; không log lỗi nghiệp vụ. Còn bước tạo service trên Render do người dùng làm. |
 | 1.10 | 20/11/2026 | Thiết kế lại giao diện (thẻ trắng, bố cục 2 cột, lưới ô tuần, icon Lucide, font Inter) và thêm hệ thống giao diện: `tokens.css` (màu 2 lớp), `components.css`, `components/ui/`, `docs/design-system.md`, test chặn màu viết cứng. |
 | 1.11 | 20/11/2026 | Phase 5–6: kiểm tra production (HTTPS, cookie, CSRF, 401, file nhạy cảm), phiên còn sau restart; sửa `APP_NAME`, thêm HSTS, `SESSION_LIFETIME` mặc định; `docs/user-guide.md`; bảng nghiệm thu mục 17 kèm bằng chứng. Giao diện chỉ dành cho máy tính. |
+| 1.12 | 20/11/2026 | Sheet `MẪU` không còn bắt buộc trong file đích (chỉ cần sheet tuần); bỏ lỗi `TEMPLATE_SHEET_MISSING`. |
 
 ------------------------------------------------------------------------
 
@@ -182,7 +183,7 @@ File nguồn không quyết định thời khóa biểu của lớp đích.
 
 File đích quyết định cấu trúc và thời khóa biểu đầu ra:
 
-- Có sheet `MẪU` — mẫu chuẩn của lớp đích.
+- Có thể có sheet `MẪU` — mẫu chuẩn để giáo viên copy ra sheet tuần. **\[ĐÃ CHỐT 20/11/2026\] Không bắt buộc**: hệ thống chỉ đọc/ghi các sheet tuần; file đích chỉ gồm các sheet tuần vẫn xử lý được.
 - Có các **sheet tuần do giáo viên tự tạo** bằng cách copy sheet `MẪU` trong Excel (mục 4.4).
 - Thứ tự môn học theo từng ngày/tiết **trên mỗi sheet tuần** là thời khóa biểu của lớp đích cho tuần đó.
 - Các vị trí môn học trên sheet tuần là các slot sẽ nhận nội dung.
@@ -1144,8 +1145,8 @@ Response:
 {
   "success": false,
   "error": {
-    "code": "TEMPLATE_SHEET_MISSING",
-    "message": "Không tìm thấy sheet MẪU trong file đích.",
+    "code": "INVALID_FILE_TYPE",
+    "message": "File đích không đúng định dạng .xlsx.",
     "details": {}
   }
 }
@@ -1160,7 +1161,7 @@ Không trả stack trace, đường dẫn nội bộ, secret hoặc thông tin s
 | `INVALID_FILE_TYPE` | Lỗi | Request | File không đúng định dạng .xlsx. |
 | `FILE_TOO_LARGE` | Lỗi | Request | File vượt quá dung lượng cho phép. |
 | `WORKBOOK_CORRUPT` | Lỗi | Request | Không mở được file, file có thể bị lỗi. |
-| `TEMPLATE_SHEET_MISSING` | Lỗi | Request | Không tìm thấy sheet MẪU trong file đích. |
+| ~~`TEMPLATE_SHEET_MISSING`~~ | — | — | Bỏ từ bản 1.12: sheet MẪU không còn bắt buộc trong file đích. |
 | `NO_WEEK_SHEETS` | Lỗi | Request | File nguồn không có sheet tuần nào. |
 | `JOB_NOT_FOUND` | Lỗi | Request | Phiên xử lý đã hết hạn, vui lòng upload lại. |
 | `ANALYSIS_OUTDATED` | Lỗi | Request | Lựa chọn đã thay đổi, vui lòng phân tích lại. |
@@ -1560,7 +1561,7 @@ Dùng bản sao workbook thực tế đã ẩn dữ liệu nhạy cảm.
 6. Sheet tuần đích đã có dữ liệu.
 7. Hai sheet cùng số tuần.
 8. Sheet tuần đích sai cấu trúc.
-9. Thiếu sheet `MẪU`.
+9. File đích không có sheet `MẪU` (vẫn xử lý được).
 10. Tên môn có khoảng trắng thừa, alias, chỉ có ở một phía.
 11. Tên bài dài.
 12. Đồ dùng trống trong khi `MẪU` có nội dung mặc định.

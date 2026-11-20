@@ -56,9 +56,8 @@ def _load_inputs(job_dir: Path) -> Inputs:
     cfg = load_config()
     profile = cfg.profile
     source = open_workbook(job_dir / SOURCE, "File nguồn")
+    # The target only needs week sheets; MẪU is optional (it is just what the teacher copies from).
     target = open_workbook(job_dir / TARGET, "File đích")
-    if profile["template_sheet"] not in target.sheetnames:
-        raise EngineError("TEMPLATE_SHEET_MISSING", f"Không tìm thấy sheet {profile['template_sheet']} trong file đích.")
     source_weeks = week_sheets(source, profile)
     if not source_weeks:
         raise EngineError("NO_WEEK_SHEETS", "File nguồn không có sheet tuần nào (tên dạng “TUẦN 1”).")
@@ -110,7 +109,8 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
     elif not dst_names:
         status = "missing"
         errors.append(issue("TARGET_WEEK_SHEET_MISSING",
-                            f"Chưa có sheet tuần {no} trong file đích — hãy copy sheet {profile['template_sheet']}.", week=no))
+                            f"Chưa có sheet tuần {no} trong file đích — hãy tạo sheet tuần (copy sheet {profile['template_sheet']} "
+                            f"hoặc một sheet tuần khác).", week=no))
     else:
         problems = structure_problems(inp.target[dst_name], profile, allow_day_off_merges=False)
         if problems:
@@ -142,10 +142,12 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
 
 
 def _subject_list(inp: Inputs) -> list[str]:
-    """Subjects found in source week sheets and the target template/week sheets, config order first."""
+    """Subjects found in source week sheets and the target week sheets (+ MẪU if present), config order first."""
     profile, found = inp.cfg.profile, set()
     sheets = [inp.source[n] for names in inp.source_weeks.values() for n in names]
-    sheets += [inp.target[profile["template_sheet"]]] + [inp.target[n] for names in inp.target_weeks.values() for n in names]
+    sheets += [inp.target[n] for names in inp.target_weeks.values() for n in names]
+    if profile["template_sheet"] in inp.target.sheetnames:
+        sheets.append(inp.target[profile["template_sheet"]])
     for ws in sheets:
         found.update(s.subject for s in parse_week_sheet(ws, profile, inp.normalizer).slots if s.subject)
     order = dict.fromkeys(inp.normalizer.key(s) for s in inp.cfg.subjects["subjects"])

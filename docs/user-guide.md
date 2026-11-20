@@ -11,9 +11,9 @@ báo giảng của lớp bạn (file đích), **theo đúng thời khóa biểu 
 
 **File nguồn:** lịch báo giảng của lớp khác, đã có tên bài các tuần cần lấy. Không cần sửa gì.
 
-**File đích:** lịch báo giảng của lớp bạn. Với mỗi tuần muốn điền:
+**File đích:** lịch báo giảng của lớp bạn. Hệ thống chỉ dùng các **sheet tuần** (sheet MẪU có hay không đều được). Với mỗi tuần muốn điền:
 
-1. Chuột phải vào sheet **MẪU** → **Move or Copy** (Di chuyển hoặc Sao chép).
+1. Chuột phải vào sheet **MẪU** (hoặc một sheet tuần trống có cùng thời khóa biểu) → **Move or Copy** (Di chuyển hoặc Sao chép).
 2. Tích **Create a copy** (Tạo bản sao) → **OK**.
 3. Đổi tên sheet vừa tạo thành tên tuần, ví dụ **TUẦN 12** (số tuần giống file nguồn).
 4. Nếu tuần đó thời khóa biểu khác bình thường, sửa luôn cột **Môn** trên sheet tuần đó.

@@ -64,14 +64,20 @@ def test_business_error_is_written_to_result_file(tmp_path):
     assert read(tmp_path, "weeks.json")["error"]["code"] == "INVALID_FILE_TYPE"
 
 
-def test_missing_template_sheet(tmp_path):
+def test_target_without_template_sheet_works(tmp_path):
+    """MẪU is optional in the target: only week sheets matter."""
     job(tmp_path)
     wb_path = tmp_path / "target.xlsx"
     wb = openpyxl.load_workbook(wb_path)  # throwaway copy; openpyxl save is fine for building test input
-    wb["MẪU"].title = "KHAC"
+    del wb["MẪU"]
     wb.save(wb_path)
-    cli("list-weeks", tmp_path, expect=1)
-    assert read(tmp_path, "weeks.json")["error"]["code"] == "TEMPLATE_SHEET_MISSING"
+    cli("list-weeks", tmp_path)
+    weeks = read(tmp_path, "weeks.json")
+    assert [w["week_number"] for w in weeks["weeks"] if w["selectable"]] == [8]
+    request(tmp_path, weeks=[8], selected_subjects=["Toán"])
+    cli("analyze", tmp_path)
+    cli("generate", tmp_path)
+    assert read(tmp_path, "generate.json")["weeks_filled"] == [8]
 
 
 # --- list-weeks -----------------------------------------------------------------------------------
