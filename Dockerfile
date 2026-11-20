@@ -43,11 +43,13 @@ COPY --from=vendor --chown=www-data:www-data /app/vendor ./vendor
 COPY --from=assets --chown=www-data:www-data /app/public/build ./public/build
 RUN php artisan package:discover --ansi
 
-ENV APP_ENV=production \
+ENV APP_NAME="Teacher Workspace" \
+    APP_ENV=production \
     APP_DEBUG=false \
     LOG_CHANNEL=stderr \
     SESSION_DRIVER=cookie \
     SESSION_SECURE_COOKIE=true \
+    SESSION_LIFETIME=10080 \
     CACHE_STORE=array \
     QUEUE_CONNECTION=sync \
     PYTHON_BINARY=/opt/venv/bin/python \

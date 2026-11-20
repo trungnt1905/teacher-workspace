@@ -2,7 +2,7 @@
 
 ## Detail Design — Kiến trúc và đặc tả kỹ thuật MVP
 
-- **Phiên bản tài liệu:** 1.10
+- **Phiên bản tài liệu:** 1.11
 - **Ngày:** 19/11/2026
 - **Trạng thái:** Bản thiết kế đề xuất để triển khai MVP
 - **Ngôn ngữ:** Tiếng Việt
@@ -23,6 +23,7 @@
 | 1.8 | 20/11/2026 | Phase 4 hoàn thành: giao diện đăng nhập và wizard 4 bước; upload trả thêm `days`; khôi phục job sau khi tải lại trang; Vitest cho frontend. |
 | 1.9 | 20/11/2026 | Phase 5 (phần trong repo): Dockerfile, cấu hình `docker/`, `render.yaml`, `docs/deployment.md`; trust proxy; `PreventRequestForgery`; không log lỗi nghiệp vụ. Còn bước tạo service trên Render do người dùng làm. |
 | 1.10 | 20/11/2026 | Thiết kế lại giao diện (thẻ trắng, bố cục 2 cột, lưới ô tuần, icon Lucide, font Inter) và thêm hệ thống giao diện: `tokens.css` (màu 2 lớp), `components.css`, `components/ui/`, `docs/design-system.md`, test chặn màu viết cứng. |
+| 1.11 | 20/11/2026 | Phase 5–6: kiểm tra production (HTTPS, cookie, CSRF, 401, file nhạy cảm), phiên còn sau restart; sửa `APP_NAME`, thêm HSTS, `SESSION_LIFETIME` mặc định; `docs/user-guide.md`; bảng nghiệm thu mục 17 kèm bằng chứng. Giao diện chỉ dành cho máy tính. |
 
 ------------------------------------------------------------------------
 
@@ -1606,54 +1607,60 @@ Trên trình duyệt máy tính:
 
 # 17. Tiêu chí nghiệm thu MVP
 
+Trạng thái ngày 20/11/2026. ✅ đã có bằng chứng (test tự động hoặc kiểm tra thực tế); ⏳ cần người dùng xác nhận trên bản thật.
+Bản production: https://teacher-workspace-lr8u.onrender.com
+
 ## Hạ tầng
 
-- [ ] Frontend truy cập được qua HTTPS.
-- [ ] Backend Render hoạt động.
-- [ ] Giao diện và API chạy cùng domain trên Render (kể cả upload và download file).
-- [ ] Laravel gọi được Python.
-- [ ] Không có secret trong repository/frontend.
-- [ ] Có health endpoint.
+- [x] Frontend truy cập được qua HTTPS — kiểm tra production: HTTP → 301 HTTPS, asset tải bằng `https://`.
+- [x] Backend Render hoạt động — `/api/v1/health` trả `ok` trên production.
+- [x] Giao diện và API chạy cùng domain trên Render — giao diện, API, upload/download cùng `teacher-workspace-lr8u.onrender.com`; người dùng đã chạy thử luồng trên production.
+- [x] Laravel gọi được Python — test Laravel gọi engine thật; kịch bản trình duyệt trong container.
+- [x] Không có secret trong repository/frontend — `.env` bị `.gitignore`/`.dockerignore` loại; quét repo; `APP_KEY`/mật khẩu chỉ ở Render Environment.
+- [x] Có health endpoint — `/api/v1/health`, dùng làm health check của Render.
 
 ## Xác thực
 
-- [ ] Người chưa đăng nhập không dùng được API nghiệp vụ.
-- [ ] Đăng nhập sai bị giới hạn.
-- [ ] Đăng xuất hoạt động.
-- [ ] Phiên đăng nhập vẫn còn sau khi backend restart.
-- [ ] Job không thể bị người khác tải nếu không có quyền.
+- [x] Người chưa đăng nhập không dùng được API nghiệp vụ — production: `/auth/me`, `/timetable/jobs/*`, `/download` → 401.
+- [x] Đăng nhập sai bị giới hạn — 5 lần/phút/IP (`AuthTest::test_login_is_rate_limited`); trust proxy để lấy IP thật sau proxy Render.
+- [x] Đăng xuất hoạt động — test + kịch bản trình duyệt; đăng xuất xóa luôn job trên máy chủ (đã kiểm chứng 1 → 0).
+- [x] Phiên đăng nhập vẫn còn sau khi backend restart — kiểm tra container: login → `docker restart` → `/auth/me` vẫn 200 (session cookie mã hóa bằng `APP_KEY` cố định).
+- [x] Job không thể bị người khác tải nếu không có quyền — `test_jobs_of_another_owner_look_missing`; production: download không đăng nhập → 401.
+- [x] CSRF — production: POST thiếu token → 419 `CSRF_TOKEN_MISMATCH`.
+- [x] Cookie an toàn — production: `secure; httponly; samesite=lax`; header `X-Frame-Options DENY`, `nosniff`, `Referrer-Policy`, HSTS (từ bản 1.11).
 
 ## Excel
 
-- [ ] Upload được hai file `.xlsx`.
-- [ ] Đọc được danh sách tuần nguồn kèm trạng thái sheet đích.
-- [ ] Chỉ xử lý sheet tuần `ready`; bỏ qua sheet chưa có hoặc đã có dữ liệu, có thông báo.
-- [ ] Chọn nhiều tuần; mỗi tuần xử lý độc lập.
-- [ ] Tích chọn được môn cần đồng bộ; chỉ môn được chọn bị ghi; môn bộ môn mặc định bỏ tích.
-- [ ] HĐTV/HĐTT ghép đúng ở cả tuần chẵn và tuần lẻ.
-- [ ] Tiết trống/nghỉ: môn đó không bị ghi, có cảnh báo rõ tiết nào trống.
-- [ ] Phân phối theo môn, không theo vị trí dòng nguồn.
-- [ ] Giữ đúng thứ tự tiết trong từng môn.
-- [ ] Tên bài và đồ dùng đi cùng nhau.
-- [ ] Môn lệch số tiết bị bỏ qua, các môn khác vẫn được điền.
-- [ ] Tuần có ngày nghỉ: môn bị ảnh hưởng (ở nguồn hoặc đích) bị bỏ qua, có thông báo.
-- [ ] Nguồn trống → đích trống.
-- [ ] Ngày tháng và tiêu đề tuần lấy từ nguồn.
-- [ ] Sheet `MẪU` không bị sửa; không sheet nào bị thêm/xóa/đổi tên.
-- [ ] Định dạng mọi sheet giữ nguyên.
-- [ ] Không tự bù tuần khác.
-- [ ] Không ghi đè file nguồn/đích.
-- [ ] Output mở được bằng Excel/LibreOffice.
+- [x] Upload được hai file `.xlsx` — test Laravel + kịch bản trình duyệt.
+- [x] Đọc được danh sách tuần nguồn kèm trạng thái sheet đích — `test_list_weeks_statuses_and_subjects`.
+- [x] Chỉ xử lý sheet tuần `ready`; bỏ qua sheet chưa có hoặc đã có dữ liệu, có thông báo — `test_blocked_weeks_are_reported_not_generated`, `test_result_used_as_next_target_reports_has_data`.
+- [x] Chọn nhiều tuần; mỗi tuần xử lý độc lập — tuần bị chặn không ảnh hưởng tuần khác (test trên).
+- [x] Tích chọn được môn cần đồng bộ; chỉ môn được chọn bị ghi; môn bộ môn mặc định bỏ tích — `test_unselected_subjects_are_ignored_entirely`, `test_week_8_default_subjects_leaves_specialist_subjects_untouched`.
+- [x] HĐTV/HĐTT ghép đúng ở cả tuần chẵn và tuần lẻ — `test_interchangeable_group_renames_subject_cell`, `test_group_without_rename_when_names_equal`, tuần 8 thật (`HĐTV/HĐTT` → `HĐTT`).
+- [x] Tiết trống/nghỉ: môn đó không bị ghi, có cảnh báo rõ tiết nào trống — `test_empty_lesson_skips_subject_with_warning` (thông báo “thứ Hai tiết 1”).
+- [x] Phân phối theo môn, không theo vị trí dòng nguồn — `test_matches_by_subject_order_not_by_row`, tuần 8 thật.
+- [x] Giữ đúng thứ tự tiết trong từng môn — tuần 8 thật: Toán nguồn dòng 7,15,21,25,32 → đích 6,13,21,24,32.
+- [x] Tên bài và đồ dùng đi cùng nhau — matcher ghi E/F theo cùng bản ghi.
+- [x] Môn lệch số tiết bị bỏ qua, các môn khác vẫn được điền — `test_count_mismatch_skips_only_that_subject`.
+- [x] Tuần có ngày nghỉ: môn bị ảnh hưởng (ở nguồn hoặc đích) bị bỏ qua, có thông báo — `test_day_off_week_7_against_target_timetable`, `test_day_off_skips_subjects_with_target_slot_that_day_even_if_counts_match`.
+- [x] Nguồn trống → đích trống — test writer (xóa giá trị ô).
+- [x] Ngày tháng và tiêu đề tuần lấy từ nguồn — `test_week_8_all_subjects` (A1, E35 khớp nguồn).
+- [x] Sheet `MẪU` không bị sửa; không sheet nào bị thêm/xóa/đổi tên — `test_only_patched_sheet_changes_and_styles_kept`.
+- [x] Định dạng mọi sheet giữ nguyên — so sánh byte/XML + render LibreOffice giống từng pixel (`test_untouched_sheet_renders_pixel_identical`).
+- [x] Không tự bù tuần khác — mỗi tuần ghép độc lập; không có logic lấy bài tuần khác.
+- [x] Không ghi đè file nguồn/đích — `test_inputs_are_never_modified`.
+- [ ] ⏳ Output mở được bằng **Microsoft Excel** — đã mở được bằng LibreOffice và openpyxl; cần người dùng xác nhận đã mở file kết quả bằng Excel/WPS không báo lỗi, định dạng đúng.
 
 ## Trải nghiệm
 
-- [ ] Có hướng dẫn chuẩn bị file đích.
-- [ ] Có preview.
-- [ ] Có thông báo lỗi rõ, theo danh mục mã lỗi.
-- [ ] Có danh sách việc cần điền thủ công sau khi tạo file.
-- [ ] Có nút tải file.
-- [ ] Có trạng thái xử lý, kể cả khi backend đang khởi động.
-- [ ] Có cleanup file tạm.
+- [x] Có hướng dẫn chuẩn bị file đích — trong giao diện (cột phụ) và `docs/user-guide.md`.
+- [x] Có preview.
+- [x] Có thông báo lỗi rõ, theo danh mục mã lỗi.
+- [x] Có danh sách việc cần điền thủ công sau khi tạo file.
+- [x] Có nút tải file.
+- [x] Có trạng thái xử lý — có; riêng lần tải trang đầu khi Render đang ngủ thì trình duyệt chờ (trang trắng ~1 phút) vì giao diện do chính server phục vụ (đánh đổi đã chấp nhận ở mục 6.1).
+- [x] Có cleanup file tạm — TTL 60 phút, tối đa 5 job, xóa khi làm lượt mới/đăng xuất (test Laravel).
+- [ ] ⏳ Cold start trên production — người dùng mở lại sau ≥ 15 phút không dùng: trang tải được sau khoảng 1 phút; job cũ báo “Phiên xử lý đã hết hạn”.
 
 ------------------------------------------------------------------------
 
@@ -1758,24 +1765,26 @@ Ghi chú: `list-weeks`/upload trả thêm `days` (nhãn ngày và buổi từ `t
 
 1. ✅ `Dockerfile` multi-stage: `node:20` build asset → `composer:2` (không dev) → runtime `php:8.3-fpm-bookworm` + Nginx + Supervisor + Python 3.11 (venv `/opt/venv`). Cấu hình trong `docker/`: `nginx.conf.template` (cổng `${PORT}`, upload 12MB, timeout 90s, cache `/build/` 1 năm, chặn dotfile và file `.php` khác, header bảo mật), `php.ini`, `php-fpm.conf` (4 worker, timeout 90s, `clear_env = no`), `supervisord.conf`, `entrypoint.sh` (bắt buộc `APP_KEY`/`ADMIN_EMAIL`/`ADMIN_PASSWORD_HASH`, `APP_URL` mặc định từ `RENDER_EXTERNAL_URL`, cache config/route/view, không migrate, không `key:generate`). `.dockerignore` loại `.env`, `vendor`, `node_modules`, test, docs.
 2. ✅ Build/test Docker local: thiếu secret → container dừng kèm thông báo; 73 test Python chạy trong image (1 test render LibreOffice bỏ qua vì image không có LibreOffice); toàn bộ kịch bản trình duyệt chạy với container giới hạn 512MB — RAM đỉnh **86MB**; `/.env` → 403. Sửa 2 lỗi phát hiện khi chạy container: (a) `fastcgi_params` của Debian bỏ số cổng khỏi `HTTP_HOST` làm sai URL asset khi chạy local → gửi `$http_host`; (b) lỗi nghiệp vụ (`ApiException`) bị ghi log ERROR → `dontReport`.
-3. ⏳ Tạo Render Web Service từ `render.yaml` (Blueprint, gói Free, Singapore, `autoDeploy`), nhập 3 biến bí mật — **người dùng thực hiện**, hướng dẫn trong `docs/deployment.md`.
-4. ⏳ Deploy, kiểm tra `/api/v1/health` và trang giao diện.
-5. ⏳ Kiểm tra upload/download trên domain Render.
-6. ⏳ Kiểm tra cold start.
+3. ✅ Render Web Service tạo từ `render.yaml` — https://teacher-workspace-lr8u.onrender.com (người dùng thực hiện, 20/11/2026).
+4. ✅ `/api/v1/health` và giao diện hoạt động trên production.
+5. ✅ Upload/download trên domain Render — người dùng chạy thử luồng.
+6. ⏳ Cold start — chờ người dùng xác nhận (mục 17).
 
 Thay đổi ứng dụng kèm theo: `trustProxies(at: '*')` (IP thật cho giới hạn đăng nhập, URL `https`, cookie `Secure` sau proxy Render); đổi middleware CSRF sang `PreventRequestForgery` (tên mới của `ValidateCsrfToken` trong Laravel 13).
 
 ## Phase 6 — Bảo mật và nghiệm thu
 
-1. Kiểm tra session/cookie/CSRF.
-2. Rate limit.
-3. Upload validation.
-4. Private download.
-5. Cleanup.
-6. Kiểm thử workbook thật.
-7. Kiểm thử trên trình duyệt máy tính (Chrome, Edge).
-8. Kiểm tra backup source code và cấu hình.
-9. Viết `docs/user-guide.md` cho giáo viên.
+1. ✅ Session/cookie/CSRF — kiểm tra trực tiếp production (mục 17); phiên còn sau restart (kiểm tra container).
+2. ✅ Rate limit — test tự động.
+3. ✅ Upload validation — test (đuôi, dung lượng, chữ ký zip, gói xlsx, zip bomb).
+4. ✅ Private download — production: 401 khi chưa đăng nhập; không có URL công khai tới `storage/`; `/.env`, `/.git` → 403.
+5. ✅ Cleanup — test tự động.
+6. ✅ Kiểm thử workbook thật — 2 file của giáo viên (tuần 7 có ngày nghỉ, tuần 8 lớp khác TKB); người dùng thử trên production.
+7. ✅ Kiểm thử trình duyệt máy tính — Chrome (puppeteer) toàn luồng; người dùng thử trên production.
+8. ✅ Backup source — code trên GitHub (`teacher-workspace`), cấu hình trong `render.yaml`; secret giữ ở Render Environment. Không có dữ liệu cần backup (hệ thống không lưu lâu dài).
+9. ✅ `docs/user-guide.md` cho giáo viên.
+
+Sửa sau khi kiểm tra production: tiêu đề trang hiện “Laravel” (Render chưa có `APP_NAME`) → đặt `APP_NAME` trong Dockerfile và `render.yaml`; thêm header HSTS; `SESSION_LIFETIME` mặc định 7 ngày trong image. Lưu ý: đổi `APP_NAME` đổi tên cookie phiên → lần đầu sau khi deploy phải đăng nhập lại.
 
 ------------------------------------------------------------------------
 

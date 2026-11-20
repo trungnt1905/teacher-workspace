@@ -18,6 +18,8 @@ services:
       - key: ADMIN_PASSWORD_HASH
         sync: false
       # Non-secret settings (defaults also baked into the Dockerfile).
+      - key: APP_NAME
+        value: Teacher Workspace
       - key: APP_ENV
         value: production
       - key: APP_DEBUG

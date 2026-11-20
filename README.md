@@ -112,5 +112,5 @@ npm run build
 | 2 | Python Excel engine (`list-weeks`, `analyze`, `generate`) | ✅ |
 | 3 | Laravel API: đăng nhập, upload, phân tích, tạo file, tải về | ✅ |
 | 4 | Giao diện: đăng nhập, wizard 4 bước | ✅ |
-| 5 | Deploy: Dockerfile + `render.yaml` sẵn sàng — xem [docs/deployment.md](docs/deployment.md) | 🟡 chờ tạo service trên Render |
-| 6 | Bảo mật và nghiệm thu | ⏳ |
+| 5 | Deploy lên Render: https://teacher-workspace-lr8u.onrender.com ([docs/deployment.md](docs/deployment.md)) | ✅ |
+| 6 | Bảo mật và nghiệm thu ([hướng dẫn sử dụng](docs/user-guide.md)) | ✅ (còn 2 mục chờ xác nhận, mục 17) |
