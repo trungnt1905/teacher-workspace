@@ -88,13 +88,13 @@ export function toggleDayOff(overrides, weekNumber, day, currentState) {
 }
 
 /**
- * Why a target week cannot be selected: 'source_missing' (the source file has no such week),
+ * Why a source week cannot be selected: 'target_missing' (the target file has no sheet for it),
  * 'has_data' (the target sheet is already filled) or 'error' (sheet unreadable, duplicate, …).
  */
 export function weekProblem(week) {
   if (week.selectable) return null
   const codes = week.errors.map((e) => e.code)
-  if (codes.length === 1 && codes[0] === 'SOURCE_WEEK_SHEET_MISSING') return 'source_missing'
+  if (codes.length === 1 && codes[0] === 'TARGET_WEEK_SHEET_MISSING') return 'target_missing'
   if (codes.length === 1 && codes[0] === 'TARGET_WEEK_HAS_DATA') return 'has_data'
   return 'error'
 }
@@ -104,7 +104,7 @@ export function weekProblem(week) {
  * line ("Tuần 9, Tuần 10…") instead of repeated messages. Other problems keep their own message.
  */
 export function unavailableGroups(weeks) {
-  const grouped = { source_missing: [], has_data: [] }
+  const grouped = { target_missing: [], has_data: [] }
   const others = []
   for (const w of weeks ?? []) {
     const problem = weekProblem(w)
@@ -114,8 +114,8 @@ export function unavailableGroups(weeks) {
   }
   const list = (nums) => nums.map((n) => `Tuần ${n}`).join(', ')
   const groups = []
-  if (grouped.source_missing.length) {
-    groups.push({ tone: 'amber', title: 'File nguồn không có tuần này', text: `${list(grouped.source_missing)} — chọn file nguồn có các tuần này nếu muốn đồng bộ.` })
+  if (grouped.target_missing.length) {
+    groups.push({ tone: 'amber', title: 'File đích không có sheet cho tuần này', text: `${list(grouped.target_missing)} — dùng file đích chỉ có một sheet (ví dụ file mẫu) hoặc thêm sheet “TUẦN n”.` })
   }
   if (grouped.has_data.length) {
     groups.push({ tone: 'gray', title: 'Sheet đã có dữ liệu (bỏ qua)', text: `${list(grouped.has_data)} — muốn làm lại thì dùng sheet tuần còn trống.` })

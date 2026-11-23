@@ -98,3 +98,27 @@ def test_untouched_sheet_renders_pixel_identical(tmp_path):
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
     assert _render_pages(original, tmp_path / "a") == _render_pages(out, tmp_path / "b")
+
+
+def test_rename_sheet_updates_tab_defined_names_and_app_props(tmp_path):
+    src = tmp_path / "with_print_area.xlsx"
+    # test input: give the workbook a print area that references the sheet by name
+    _rewrite_sheet_xml(TARGET, src, "xl/workbook.xml", lambda d: d.replace(
+        b"</sheets>", b"</sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"1\">"
+                      + "'TUẦN 8'!$A$1:$F$36".encode() + b"</definedName></definedNames>", 1))
+    out = tmp_path / "out.xlsx"
+    edits = {"TUẦN 8": {"E4": "Bài mới"}}
+    write_workbook(src, out, edits, ALLOWED, {"TUẦN 8": "TUẦN 9"})
+    verify_written(src, out, edits, {"TUẦN 8": "TUẦN 9"})
+    wb = openpyxl.load_workbook(out)
+    assert wb.sheetnames == ["MẪU", "TUẦN 9"]
+    assert wb["TUẦN 9"]["E4"].value == "Bài mới"
+    with zipfile.ZipFile(out) as z:
+        assert "'TUẦN 9'!$A$1:$F$36" in z.read("xl/workbook.xml").decode()
+        assert "TUẦN 9" in z.read("docProps/app.xml").decode()
+
+
+@pytest.mark.parametrize("bad", ["MẪU", "A/B", "x" * 32, ""])
+def test_rename_refuses_invalid_or_duplicate_names(tmp_path, bad):
+    with pytest.raises(ValueError):
+        write_workbook(TARGET, tmp_path / "out.xlsx", {"TUẦN 8": {}}, ALLOWED, {"TUẦN 8": bad})

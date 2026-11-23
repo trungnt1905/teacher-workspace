@@ -84,7 +84,8 @@ export const useSyncStore = defineStore('sync', {
 
     useJob(job) {
       this.job = job
-      this.selectedWeeks = job.weeks.filter((w) => w.selectable).map((w) => w.week_number)
+      // One-sheet target: the teacher picks ONE source week; otherwise every ready week is pre-selected.
+      this.selectedWeeks = job.max_weeks === 1 ? [] : job.weeks.filter((w) => w.selectable).map((w) => w.week_number)
       this.selectedSubjects = initialSubjects(job.subjects, job.default_selected_subjects)
       this.manualDaysOff = []
       this.analysis = null

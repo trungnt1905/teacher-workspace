@@ -39,7 +39,7 @@ php artisan serve & npm run dev                    # local dev at http://127.0.0
 3. Never hardcode Excel coordinates in code — use `template_profile.json` + `layout.resolve_layout()` (each sheet gets its own `Layout`).
 4. No AI for distributing lessons. Match by subject in row order (§4.6), never by source row position.
 5. Read workbooks with openpyxl; **write by patching sheet XML in place** (§5.3). Never call `openpyxl` `save()` for output: it rewrites merged-cell styles and row heights in every sheet (proven in Phase 0).
-6. Never create, delete or rename sheets; never modify sheet `MẪU` (exception: when `MẪU` is the workbook's only sheet it IS the week sheet, rule 17); never change styles; never copy styles from the source.
+6. Never create or delete sheets; never rename sheets except the one-sheet-target case (rule 17: its tab becomes `TUẦN n`, via `write_workbook(renames=…)`, which also fixes defined names and docProps/app.xml); never modify sheet `MẪU` of a multi-sheet target; never change styles; never copy styles from the source.
 7. Never overwrite the uploaded source/target files; output is always a new file.
 8. Allowed writes per week sheet = `Layout.allowed_cells()`: title `A1`, the 5 day-date cells, the signing-date cell, lesson/equipment cells of period rows; subject column only for the HĐTV/HĐTT group (§4.10). For the standard file: `A1`, `A4`, `A11`, `A18`, `A24`, `A30`, `E36`, `E4:F35`.
 9. When unsure (count mismatch, day off, empty lesson, unknown subject): skip that subject for that week and report it — never guess (§4.7, §4.8).
@@ -50,4 +50,4 @@ php artisan serve & npm run dev                    # local dev at http://127.0.0
 14. Ask when a requirement is unclear instead of assuming. Keep code readable; no abstraction for a single use.
 15. Update README and docs at the end of each phase.
 16. UI follows [docs/design-system.md](docs/design-system.md): colours only via semantic `--color-*` tokens from `resources/css/tokens.css` (no hex/rgb, no palette tokens in components); reuse `.btn`/`.card`/`.pill`/`.callout`/`.icon-tile` and `components/ui/` (`PageHeader`, `AppPanel`); icons from `lucide-vue-next`. Desktop browsers only — no phone layouts. `npm test` enforces the colour rules.
-17. Weeks processed = weeks present in the TARGET (one file per week is normal); week number from the sheet name, else from the A1 title; `MẪU` is not a week unless it is the workbook's only sheet (then its week comes from A1).
+17. Weeks are chosen from the SOURCE (week = sheet name `TUẦN n`, else A1; a one-sheet source `MẪU` uses A1). Target: one sheet not named `TUẦN n` → that sheet receives the chosen week, one week per run (`single_target_sheet`, `max_weeks: 1`); otherwise each week goes to its `TUẦN n` sheet (missing → `TARGET_WEEK_SHEET_MISSING`). The one-sheet target's tab is renamed to `TUẦN n`; `TUẦN n` sheets of multi-sheet targets are never renamed.

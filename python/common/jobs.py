@@ -17,7 +17,7 @@ from openpyxl.workbook.workbook import Workbook
 from .config import Config, load_config
 from .day_off_detector import detect_off_sessions
 from .errors import EngineError, issue
-from .normalization import SubjectNormalizer
+from .normalization import SubjectNormalizer, week_number
 from .timetable_matcher import DEFAULT_LESSON_MAX_CHARS, match_week
 from .layout import resolve_layout
 from .timetable_parser import WeekSheet, parse_week_sheet
@@ -51,6 +51,9 @@ class Inputs:
     target: Workbook
     source_weeks: dict[int, list[str]]
     target_weeks: dict[int, list[str]]
+    # One-sheet target whose sheet is not named "TUẦN n" (e.g. MẪU, Sheet1): it receives ANY one selected
+    # source week (one file per week, §4.1). None when the target has its own week sheets.
+    single_sheet: str | None = None
 
 
 def _load_inputs(job_dir: Path) -> Inputs:
@@ -62,12 +65,17 @@ def _load_inputs(job_dir: Path) -> Inputs:
     source_weeks = week_sheets(source, profile)
     if not source_weeks:
         raise EngineError("NO_WEEK_SHEETS", "File nguồn không có sheet tuần nào (tên sheet hoặc ô tiêu đề dạng “TUẦN 10”).")
-    target_weeks = week_sheets(target, profile)
-    if not target_weeks:
-        raise EngineError("NO_TARGET_WEEK_SHEETS",
-                          "File đích không có sheet tuần nào. Đặt tên sheet dạng “TUẦN 10” "
-                          "(hoặc ô tiêu đề A1 bắt đầu bằng “TUẦN 10”).")
-    return Inputs(cfg, SubjectNormalizer(cfg.subjects), source, target, source_weeks, target_weeks)
+    single_sheet = None
+    if len(target.worksheets) == 1 and week_number(target.worksheets[0].title, profile["week_sheet_pattern"]) is None:
+        # e.g. a one-week file made from the template: its only sheet takes whichever week is chosen.
+        single_sheet, target_weeks = target.worksheets[0].title, {}
+    else:
+        target_weeks = week_sheets(target, profile)
+        if not target_weeks:
+            raise EngineError("NO_TARGET_WEEK_SHEETS",
+                              "File đích không có sheet tuần nào. Dùng file đích chỉ có một sheet (ví dụ file mẫu), "
+                              "hoặc đặt tên sheet dạng “TUẦN 10”.")
+    return Inputs(cfg, SubjectNormalizer(cfg.subjects), source, target, source_weeks, target_weeks, single_sheet)
 
 
 @dataclass
@@ -97,7 +105,8 @@ class WeekInspection:
 
 def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
     profile = inp.cfg.profile
-    src_names, dst_names = inp.source_weeks.get(no, []), inp.target_weeks.get(no, [])
+    src_names = inp.source_weeks.get(no, [])
+    dst_names = [inp.single_sheet] if inp.single_sheet else inp.target_weeks.get(no, [])
     errors: list[dict] = []
     src_name = src_names[0] if src_names else None
     dst_name = dst_names[0] if len(dst_names) == 1 else None
@@ -116,8 +125,8 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
     elif not dst_names:
         status = "missing"
         errors.append(issue("TARGET_WEEK_SHEET_MISSING",
-                            f"Chưa có sheet tuần {no} trong file đích — hãy tạo sheet tuần (copy sheet {profile['template_sheet']} "
-                            f"hoặc một sheet tuần khác).", week=no))
+                            f"File đích không có sheet cho tuần {no} — dùng file đích chỉ có một sheet "
+                            f"(ví dụ file mẫu), hoặc thêm sheet “TUẦN {no}”.", week=no))
     else:
         dst_layout, problems = resolve_layout(inp.target[dst_name], profile, strict_merges=True)
         if problems:
@@ -149,11 +158,13 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
 
 
 def _subject_list(inp: Inputs) -> list[str]:
-    """Subjects found in the target week sheets and their source weeks, config order first."""
+    """Subjects found in the source weeks and the target sheet(s), config order first."""
     profile, found = inp.cfg.profile, set()
-    # Subjects of the weeks being processed: target week sheets and the matching source weeks.
-    sheets = [inp.target[n] for names in inp.target_weeks.values() for n in names]
-    sheets += [inp.source[n] for no in inp.target_weeks for n in inp.source_weeks.get(no, [])]
+    # Subjects of the source weeks and of the target sheet(s) they can be written to.
+    sheets = [inp.source[n] for names in inp.source_weeks.values() for n in names]
+    sheets += [inp.target[n] for names in inp.target_weeks.values() for n in names]
+    if inp.single_sheet:
+        sheets.append(inp.target[inp.single_sheet])
     for ws in sheets:
         layout, _ = resolve_layout(ws, profile, strict_merges=False)
         if layout:
@@ -165,8 +176,8 @@ def _subject_list(inp: Inputs) -> list[str]:
 
 def list_weeks(job_dir: Path) -> dict:
     inp = _load_inputs(job_dir)
-    # Only the weeks present in the target are processed (one file per week is fine).
-    weeks = [_inspect_week(no, inp).summary() for no in inp.target_weeks]
+    # The teacher picks weeks from the SOURCE; each goes to its target sheet (or to the single sheet).
+    weeks = [_inspect_week(no, inp).summary() for no in inp.source_weeks]
     subjects = _subject_list(inp)
     excluded = set(inp.cfg.subjects.get("default_excluded_subjects", []))
     return {
@@ -174,6 +185,9 @@ def list_weeks(job_dir: Path) -> dict:
         "weeks": weeks,
         "subjects": subjects,
         "default_selected_subjects": [s for s in subjects if s not in excluded],
+        # One-sheet target: only one week per run (the UI then selects weeks like radio buttons).
+        "single_target_sheet": inp.single_sheet,
+        "max_weeks": 1 if inp.single_sheet else None,
         # Day/session labels for the day-off toggles in the UI (no layout hardcoded in the frontend).
         "days": [{"label": d["label"], "sessions": list(d["sessions"])} for d in inp.cfg.profile["days"]],
     }
@@ -222,11 +236,15 @@ def analyze(job_dir: Path) -> dict:
     selected = set(request["selected_subjects"])
     max_chars = profile.get("lesson_max_chars", DEFAULT_LESSON_MAX_CHARS)
 
+    if inp.single_sheet and len(request["weeks"]) > 1:
+        raise EngineError("INVALID_REQUEST",
+                          f"File đích chỉ có một sheet ({inp.single_sheet}) — mỗi lần chỉ chọn được một tuần.")
+
     weeks = []
     for no in request["weeks"]:
         ins = _inspect_week(no, inp)
         week = {**ins.summary(), "status": "blocked", "days_off": [], "subjects": [], "warnings": [],
-                "header_changes": [], "writes": {}}
+                "header_changes": [], "sheet_rename": None, "writes": {}}
         weeks.append(week)
         if not ins.selectable or ins.source is None:
             continue
@@ -247,13 +265,17 @@ def analyze(job_dir: Path) -> dict:
         week.update(status="ready", days_off=[o.to_dict() for o in off], subjects=match.subjects,
                     warnings=match.warnings, header_changes=changes)
         week["writes"] = {**{c["cell"]: c["to"] for c in changes}, **match.writes}
+        # One-sheet target: its tab is renamed to the chosen week (e.g. "MẪU" -> "TUẦN 8").
+        new_name = f"TUẦN {no}"
+        if inp.single_sheet and ins.target_sheet != new_name:
+            week["sheet_rename"] = {"from": ins.target_sheet, "to": new_name}
 
     result = {
         "success": True,
         "source_sha256": sha256(job_dir / SOURCE),
         "target_sha256": sha256(job_dir / TARGET),
         "request": request,
-        "can_generate": any(w["status"] == "ready" and w["writes"] for w in weeks),
+        "can_generate": any(w["status"] == "ready" and (w["writes"] or w["sheet_rename"]) for w in weeks),
         "weeks": weeks,
     }
     write_json(job_dir / ANALYSIS, result)
@@ -274,7 +296,9 @@ def generate(job_dir: Path) -> dict:
         raise EngineError("NOTHING_TO_GENERATE", "Không có tuần/môn nào đủ điều kiện để điền.")
 
     profile = load_config().profile
-    edits = {w["target_sheet"]: w["writes"] for w in analysis["weeks"] if w["status"] == "ready" and w["writes"]}
+    ready = [w for w in analysis["weeks"] if w["status"] == "ready" and (w["writes"] or w.get("sheet_rename"))]
+    edits = {w["target_sheet"]: w["writes"] for w in ready}
+    renames = {w["sheet_rename"]["from"]: w["sheet_rename"]["to"] for w in ready if w.get("sheet_rename")}
 
     # Whitelist per sheet comes from re-reading the target's layout, not from analysis.json.
     target = open_workbook(job_dir / TARGET, "File đích")
@@ -287,8 +311,8 @@ def generate(job_dir: Path) -> dict:
 
     tmp = job_dir / "result.partial.xlsx"  # openpyxl (used by verify) only opens *.xlsx names
     try:
-        write_workbook(job_dir / TARGET, tmp, edits, allowed)
-        verify_written(job_dir / TARGET, tmp, edits)
+        write_workbook(job_dir / TARGET, tmp, edits, allowed, renames)
+        verify_written(job_dir / TARGET, tmp, edits, renames)
         os.replace(tmp, job_dir / RESULT)
     finally:
         tmp.unlink(missing_ok=True)
@@ -306,5 +330,6 @@ def generate(job_dir: Path) -> dict:
         "output_file": RESULT,
         "weeks_filled": sorted(w["week_number"] for w in analysis["weeks"] if w["target_sheet"] in edits),
         "cells_written": sum(len(e) for e in edits.values()),
+        "renamed_sheets": [{"from": old, "to": new} for old, new in renames.items()],
         "manual_todo": manual_todo,
     }

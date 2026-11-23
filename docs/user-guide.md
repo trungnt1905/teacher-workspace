@@ -13,13 +13,13 @@ báo giảng của lớp bạn (file đích), **theo đúng thời khóa biểu 
 
 **File đích:** lịch báo giảng của lớp bạn, thường **mỗi tuần một file**, tạo từ file mẫu chuẩn **MAU_LBG.xlsx** (đã có thời khóa biểu lớp bạn):
 
-1. Copy file mẫu thành file mới cho tuần cần làm.
-2. Đặt tên sheet theo tuần, ví dụ **TUẦN 12** — hoặc giữ nguyên tên sheet (kể cả “MẪU” nếu file chỉ có một sheet) và để ô tiêu đề **A1** bắt đầu bằng “TUẦN 12”.
-3. Nếu tuần đó thời khóa biểu khác bình thường, sửa luôn cột **Môn** trên sheet.
-4. Không cần sửa ngày tháng và tiêu đề — hệ thống lấy theo file nguồn.
-5. Lưu file dạng **.xlsx**.
+1. Copy file mẫu thành file mới (không cần đổi tên sheet, không cần sửa ngày tháng).
+2. Nếu tuần đó thời khóa biểu khác bình thường, sửa luôn cột **Môn** trên sheet.
+3. Lưu file dạng **.xlsx**.
 
-Hệ thống chỉ xử lý **các tuần có trong file đích**. File nguồn có thêm tuần khác thì bỏ qua. File kiểu cũ (bảng lệch dòng so với mẫu) vẫn đọc được — hệ thống tự tìm bảng theo nội dung.
+Ở bước chọn tuần, danh sách tuần lấy từ **file nguồn**. File đích chỉ có một sheet thì mỗi lần chọn **một tuần** —
+tên bài, đồ dùng, tiêu đề và ngày tháng của tuần đó được điền vào sheet, và tên sheet tự đổi thành “TUẦN n”. (File đích có nhiều sheet “TUẦN n” vẫn dùng
+được: tuần nào có sheet thì điền vào sheet đó.) File kiểu cũ (bảng lệch dòng so với mẫu) vẫn đọc được.
 
 > Nếu file của bạn là `.xls`, mở bằng Excel → **File → Save As** → chọn **Excel Workbook (.xlsx)**.
 
@@ -38,7 +38,7 @@ Vào menu **Lịch báo giảng**.
 **Bước 2 — Chọn tuần và môn:**
 
 - Các ô **Tuần**: ô trắng là tuần chọn được, ô xanh là tuần đang chọn. Ô viền nét đứt là tuần chưa dùng được (chấm cam:
-  file nguồn không có tuần đó; chấm xám: sheet đã có dữ liệu; chấm đỏ: không đọc được bảng). Dòng nhắc bên dưới nói rõ cần làm gì.
+  file đích không có sheet cho tuần đó; chấm xám: sheet đã có dữ liệu; chấm đỏ: không đọc được bảng). Dòng nhắc bên dưới nói rõ cần làm gì.
 - Các ô **Môn**: tích môn nào thì điền môn đó. Nút **Mặc định** bỏ các môn giáo viên bộ môn dạy. Lựa chọn được nhớ cho lần sau.
 - Bấm **Phân tích và xem trước**.
 

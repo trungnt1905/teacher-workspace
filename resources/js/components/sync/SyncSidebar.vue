@@ -62,11 +62,11 @@ function state(step) {
     <details class="card block guide" :open="sync.step === 1">
       <summary><Info /> Chuẩn bị file đích</summary>
       <ol>
-        <li>Mỗi tuần một file: tạo file lịch báo giảng lớp bạn từ file mẫu <strong>MAU_LBG</strong> (đã có thời khóa biểu).</li>
-        <li>Đặt tên sheet theo tuần, ví dụ <strong>TUẦN 12</strong> — hoặc giữ tên sheet (kể cả “MẪU” nếu file chỉ có một sheet) và để ô A1 bắt đầu bằng “TUẦN 12”.</li>
+        <li>Mỗi tuần một file: copy file mẫu <strong>MAU_LBG</strong> (đã có thời khóa biểu lớp bạn) thành file mới.</li>
+        <li>Không cần đổi tên sheet hay sửa ngày tháng — ở bước 2 bạn chọn tuần, hệ thống điền tiêu đề, ngày và tên bài theo file nguồn.</li>
         <li>Nếu tuần đó thời khóa biểu khác, sửa cột Môn ngay trên sheet.</li>
-        <li>Không cần sửa ngày tháng — hệ thống lấy theo file nguồn.</li>
-        <li>Lưu file (.xlsx) rồi tải lên cùng file nguồn có tuần đó.</li>
+        <li>Lưu file (.xlsx) rồi tải lên cùng file nguồn (file nguồn có thể chứa nhiều tuần).</li>
+        <li>File có nhiều sheet “TUẦN n” vẫn dùng được: tuần nào có sheet thì điền vào sheet đó.</li>
       </ol>
       <p class="muted small">
         Hệ thống chỉ điền vào sheet tuần còn trống, giữ nguyên định dạng. File gốc không bị thay đổi — kết quả là một file mới.

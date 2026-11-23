@@ -18,6 +18,9 @@ from .errors import EngineError
 
 NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+NS_VT = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"
+WORKBOOK_PART, APP_PART = "xl/workbook.xml", "docProps/app.xml"
+_BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
 NS = {"m": NS_MAIN}
 M = f"{{{NS_MAIN}}}"
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
@@ -81,12 +84,43 @@ def _patch_sheet(data: bytes, edits: dict[str, str | None], sheet_name: str) -> 
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
 
 
+def _quoted(name: str) -> str:
+    return "'" + name.replace("'", "''") + "'"
+
+
+def _rename_in_workbook(data: bytes, renames: dict[str, str]) -> bytes:
+    """Rename <sheet name=…> and fix sheet references in defined names (print area/titles…)."""
+    root = _parse(data)
+    for sheet in root.iterfind("m:sheets/m:sheet", NS):
+        if sheet.get("name") in renames:
+            sheet.set("name", renames[sheet.get("name")])
+    for dn in root.iterfind("m:definedNames/m:definedName", NS):
+        text = dn.text or ""
+        for old, new in renames.items():
+            text = text.replace(_quoted(old) + "!", _quoted(new) + "!")
+            text = re.sub(r"(^|[=,(\s])" + re.escape(old) + "!", lambda m: m.group(1) + _quoted(new) + "!", text)
+        dn.text = text
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+
+def _rename_in_app_props(data: bytes, renames: dict[str, str]) -> bytes:
+    """Sheet titles listed in docProps/app.xml (TitlesOfParts)."""
+    root = _parse(data)
+    for item in root.iter(f"{{{NS_VT}}}lpstr"):
+        if item.text in renames:
+            item.text = renames[item.text]
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+
 def write_workbook(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str | None]],
-                   allowed_by_sheet: dict[str, set[str]]) -> None:
+                   allowed_by_sheet: dict[str, set[str]], renames: dict[str, str] | None = None) -> None:
     """Copy src to dst, applying value edits to the named sheets. src is never modified.
 
     allowed_by_sheet: whitelist per sheet, from that sheet's Layout.allowed_cells() (CLAUDE.md rule 8).
+    renames: old sheet name -> new tab name (only for a one-sheet target that received week n, §4.1).
+    Edits are keyed by the ORIGINAL sheet names.
     """
+    renames = renames or {}
     for sheet, edits in edits_by_sheet.items():
         outside = sorted(set(edits) - allowed_by_sheet.get(sheet, set()))
         if outside:
@@ -94,10 +128,13 @@ def write_workbook(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str
 
     with zipfile.ZipFile(src) as zin:
         parts = sheet_parts(zin)
-        missing = [s for s in edits_by_sheet if s not in parts]
+        missing = [s for s in [*edits_by_sheet, *renames] if s not in parts]
         if missing:
             raise EngineError("TARGET_WEEK_SHEET_MISSING", f"File đích không có sheet {', '.join(missing)}.",
                               sheets=missing)
+        for old, new in renames.items():
+            if not new or len(new) > 31 or _BAD_SHEET_CHARS.search(new) or (new in parts and new != old):
+                raise ValueError(f"Invalid new sheet name {new!r} for {old!r}")
         by_part = {parts[s]: (s, e) for s, e in edits_by_sheet.items() if e}
 
         with zipfile.ZipFile(dst, "w") as zout:
@@ -106,11 +143,17 @@ def write_workbook(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str
                 if info.filename in by_part:
                     sheet, edits = by_part[info.filename]
                     data = _patch_sheet(data, edits, sheet)
+                elif renames and info.filename == WORKBOOK_PART:
+                    data = _rename_in_workbook(data, renames)
+                elif renames and info.filename == APP_PART:
+                    data = _rename_in_app_props(data, renames)
                 zout.writestr(info, data)
 
 
-def verify_written(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str | None]]) -> None:
+def verify_written(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str | None]],
+                   renames: dict[str, str] | None = None) -> None:
     """Post-write self-check (§5.4). Raises AssertionError-like EngineError on any deviation."""
+    renames = renames or {}
 
     def fail(reason: str):
         raise EngineError("OUTPUT_VERIFY_FAILED", "File kết quả không vượt qua bước tự kiểm tra.", reason=reason)
@@ -119,7 +162,10 @@ def verify_written(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str
         if a.namelist() != b.namelist():
             fail("package parts differ")
         patched = {sheet_parts(a)[s] for s, e in edits_by_sheet.items() if e}
+        renamed_parts = {WORKBOOK_PART, APP_PART} if renames else set()
         for name in a.namelist():
+            if name in renamed_parts:
+                continue
             if name not in patched and a.read(name) != b.read(name):
                 fail(f"unexpected change in {name}")
         for part in patched:
@@ -130,8 +176,11 @@ def verify_written(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str
                 fail(f"cell set or styles changed in {part}")
 
     wb = openpyxl.load_workbook(dst)
+    expected_names = [renames.get(n, n) for n in openpyxl.load_workbook(src, read_only=True).sheetnames]
+    if wb.sheetnames != expected_names:
+        fail(f"sheet names {wb.sheetnames} != {expected_names}")
     for sheet, edits in edits_by_sheet.items():
-        ws = wb[sheet]
+        ws = wb[renames.get(sheet, sheet)]
         for ref, value in edits.items():
             if ws[ref].value != value:
                 fail(f"{sheet}!{ref} reads back {ws[ref].value!r}")

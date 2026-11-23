@@ -22,7 +22,7 @@ const chosen = computed(() => [source.value, target.value].filter(Boolean).lengt
       <FilePicker v-model="source" label="File nguồn" tag="Lớp khác" :disabled="uploading"
                   hint="Lịch báo giảng đã có tên bài, đồ dùng dạy học." />
       <FilePicker v-model="target" label="File đích" tag="Lớp của bạn" :disabled="uploading"
-                  hint="Lịch báo giảng lớp bạn — sheet tuần (ví dụ TUẦN 12) còn trống. Tuần nào có trong file này thì xử lý tuần đó." />
+                  hint="Lịch báo giảng lớp bạn, còn trống — thường là file một tuần tạo từ file mẫu. Bạn chọn tuần cần điền ở bước 2." />
     </div>
 
     <div v-if="uploading" class="uploading">

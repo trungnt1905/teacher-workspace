@@ -13,7 +13,9 @@ const defaults = computed(() => sync.job?.default_selected_subjects ?? [])
 const reasons = computed(() => unavailableGroups(weeks.value))
 const canAnalyze = computed(() => sync.selectedWeeks.length > 0 && sync.selectedSubjects.length > 0 && !sync.busy)
 
-const PROBLEM_TEXT = { source_missing: 'File nguồn không có tuần này', has_data: 'Sheet đã có dữ liệu', error: 'Không đọc được sheet' }
+const PROBLEM_TEXT = { target_missing: 'File đích không có sheet cho tuần này', has_data: 'Sheet đã có dữ liệu', error: 'Không đọc được sheet' }
+// One-sheet target (file made from the template): exactly one source week per run.
+const singleSheet = computed(() => sync.job?.single_target_sheet ?? null)
 
 function tileClass(week) {
   const problem = weekProblem(week)
@@ -24,6 +26,10 @@ function tileClass(week) {
 function toggleWeek(week) {
   if (!week.selectable) return
   const n = week.week_number
+  if (singleSheet.value) {
+    sync.selectedWeeks = sync.selectedWeeks.includes(n) ? [] : [n]
+    return
+  }
   sync.selectedWeeks = sync.selectedWeeks.includes(n) ? sync.selectedWeeks.filter((w) => w !== n) : [...sync.selectedWeeks, n]
 }
 
@@ -36,15 +42,23 @@ function toggleSubject(subject) {
 
 <template>
   <AppPanel eyebrow="Bước 2 · Chọn tuần và môn" title="Đồng bộ tuần nào, môn nào?"
-             description="Các tuần có trong file đích. Chọn được khi file nguồn cũng có tuần đó và sheet tuần ở file đích còn trống. Môn không tích sẽ giữ nguyên như file đích.">
+             description="Các tuần lấy từ file nguồn. Chọn tuần cần điền và các môn cần đồng bộ; môn không tích giữ nguyên như file đích.">
     <section class="group">
       <div class="group-head">
         <h3>Tuần <span class="muted count">{{ sync.selectedWeeks.length }}/{{ sync.selectableWeeks.length }} đã chọn</span></h3>
-        <div class="bulk">
+        <div v-if="!singleSheet" class="bulk">
           <button type="button" class="btn btn-link" @click="sync.selectedWeeks = [...sync.selectableWeeks]">Chọn tất cả</button>
           <button type="button" class="btn btn-link" @click="sync.selectedWeeks = []">Bỏ chọn</button>
         </div>
       </div>
+
+      <p v-if="singleSheet" class="callout">
+        <Info />
+        <span>
+          File đích chỉ có một sheet (<strong>{{ singleSheet }}</strong>): <strong>chọn 1 tuần</strong> — tên bài, đồ dùng,
+          tiêu đề và ngày tháng của tuần đó sẽ được điền vào sheet này, và sheet được đổi tên thành “TUẦN n”.
+        </span>
+      </p>
 
       <div class="tiles weeks">
         <button v-for="week in weeks" :key="week.week_number" type="button" class="tile" :class="tileClass(week)"
@@ -59,7 +73,7 @@ function toggleSubject(subject) {
       <div class="legend small">
         <span><i class="sw selected"></i>Đã chọn</span>
         <span><i class="sw ready"></i>Sẵn sàng</span>
-        <span><i class="sw source_missing"></i>File nguồn không có</span>
+        <span><i class="sw target_missing"></i>File đích chưa có sheet</span>
         <span><i class="sw has_data"></i>Đã có dữ liệu</span>
         <span><i class="sw error"></i>Không đọc được</span>
       </div>
@@ -72,7 +86,7 @@ function toggleSubject(subject) {
       </ul>
       <p v-if="sync.selectableWeeks.length === 0" class="callout warn">
         <AlertTriangle />
-        <span>Chưa có tuần nào đồng bộ được. Kiểm tra file nguồn có đúng tuần của file đích không, và sheet tuần ở file đích còn trống.</span>
+        <span>Chưa có tuần nào đồng bộ được. Dùng file đích chỉ có một sheet (ví dụ file mẫu), hoặc file đích có sheet “TUẦN n” còn trống.</span>
       </p>
     </section>
 
@@ -198,7 +212,7 @@ function toggleSubject(subject) {
   border-radius: 50%;
   background: var(--color-danger);
 }
-.tile.source_missing::after {
+.tile.target_missing::after {
   background: var(--color-warning);
 }
 .tile.has_data::after {
@@ -227,14 +241,14 @@ function toggleSubject(subject) {
   background: var(--color-primary-soft);
   border-color: var(--color-primary);
 }
-.sw.source_missing,
+.sw.target_missing,
 .sw.has_data,
 .sw.error {
   border-style: dashed;
   background: var(--color-surface-muted);
   position: relative;
 }
-.sw.source_missing::after,
+.sw.target_missing::after,
 .sw.has_data::after,
 .sw.error::after {
   content: '';

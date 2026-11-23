@@ -57,6 +57,9 @@ async function copyTodo() {
       <span class="dl-text">
         <span class="dl-name" :title="result.file_name">{{ result.file_name }}</span>
         <span class="muted small">{{ result.weeks_filled.map((w) => `Tuần ${w}`).join(', ') }}</span>
+        <span v-for="r in result.renamed_sheets ?? []" :key="r.from" class="muted small">
+          Đã đổi tên sheet: {{ r.from }} → <strong>{{ r.to }}</strong>
+        </span>
       </span>
       <a class="btn btn-primary btn-lg" :href="downloadUrl(sync.job.job_id)" :download="result.file_name">
         <Download /> Tải file Excel

@@ -85,14 +85,20 @@ function minorNotes(week) {
           </button>
         </div>
 
-        <section class="header-changes" :class="{ none: !week.header_changes.length }">
-          <h4><CalendarCheck /> Tiêu đề và ngày tháng</h4>
-          <p v-if="!week.header_changes.length" class="muted small">Đã đúng theo file nguồn — không thay đổi.</p>
+        <section class="header-changes" :class="{ none: !week.header_changes.length && !week.sheet_rename }">
+          <h4><CalendarCheck /> Tên sheet, tiêu đề và ngày tháng</h4>
+          <p v-if="!week.header_changes.length && !week.sheet_rename" class="muted small">Đã đúng theo file nguồn — không thay đổi.</p>
           <table v-else>
             <thead>
               <tr><th>Ô</th><th>Hiện tại (file đích)</th><th></th><th>Sẽ đổi thành (theo file nguồn)</th></tr>
             </thead>
             <tbody>
+              <tr v-if="week.sheet_rename">
+                <td class="label">Tên sheet</td>
+                <td class="old">{{ week.sheet_rename.from }}</td>
+                <td class="arrow"><ArrowRight /></td>
+                <td class="new">{{ week.sheet_rename.to }}</td>
+              </tr>
               <tr v-for="c in week.header_changes" :key="c.cell">
                 <td class="label">{{ c.label }}</td>
                 <td class="old">{{ c.from?.trim() || '(trống)' }}</td>

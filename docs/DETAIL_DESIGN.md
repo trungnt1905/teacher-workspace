@@ -2,7 +2,7 @@
 
 ## Detail Design — Kiến trúc và đặc tả kỹ thuật MVP
 
-- **Phiên bản tài liệu:** 1.15
+- **Phiên bản tài liệu:** 1.17
 - **Ngày:** 19/11/2026
 - **Trạng thái:** Bản thiết kế đề xuất để triển khai MVP
 - **Ngôn ngữ:** Tiếng Việt
@@ -28,6 +28,8 @@
 | 1.13 | 20/11/2026 | Tiêu đề tuần, ngày tháng, ngày ký luôn sửa theo nguồn cho tuần được chọn (kể cả khi không môn nào được điền), chỉ ghi ô khác biệt; màn xem trước hiển thị bảng thay đổi (`header_changes`). |
 | 1.14 | 23/11/2026 | File chuẩn mới `MAU_LBG.xlsx` (lệch 1 dòng so với file cũ): tọa độ cố định theo file mới + tự tìm bảng theo nội dung khi không khớp (`layout.py`). Mỗi tuần có thể là một file: danh sách tuần lấy theo file đích, tuần lấy từ tên sheet hoặc A1. Thêm `NO_TARGET_WEEK_SHEETS`. |
 | 1.15 | 23/11/2026 | File chỉ có một sheet `MẪU` (file một tuần tạo từ mẫu) → sheet đó là tuần, số tuần lấy từ `A1`. |
+| 1.16 | 23/11/2026 | Danh sách tuần lấy từ **file nguồn**. File đích một sheet (tên không phải “TUẦN n”) nhận bất kỳ tuần được chọn, mỗi lần một tuần (`single_target_sheet`, `max_weeks: 1`); file đích nhiều sheet “TUẦN n” ghép theo số tuần. |
+| 1.17 | 23/11/2026 | File đích một sheet: tên tab đổi thành “TUẦN n” theo tuần được chọn (`sheet_rename` ở bước xem trước, `renamed_sheets` ở kết quả). |
 
 ------------------------------------------------------------------------
 
@@ -168,7 +170,11 @@ Hai file có cấu trúc bảng gần như giống hệt nhau. Khác biệt ch�
 
 **\[ĐÃ CHỐT 23/11/2026\]** File chuẩn hiện tại là **`MAU_LBG.xlsx`** (tiêu đề `A1`, hàng tiêu đề cột ở dòng 3, tiết học dòng 4–35, ngày ký `E36`). Các file cũ (như `LBG_mau.xlsx`, bảng bắt đầu sớm hơn 1 dòng) vẫn đọc được: hệ thống thử tọa độ cố định của file chuẩn trước, không khớp thì **tự tìm bảng theo nội dung** (mục 8.2). Dùng một parser cho cả hai file; file nguồn và file đích có thể khác bố cục.
 
-**\[ĐÃ CHỐT 23/11/2026\] Mỗi tuần có thể là một file riêng.** File đích có tuần nào thì xử lý tuần đó; file nguồn có thể có nhiều tuần hơn (tuần thừa bỏ qua). Số tuần lấy từ tên sheet (`TUẦN 10`); nếu tên sheet khác (ví dụ `Sheet1`) thì lấy từ ô tiêu đề `A1` (“TUẦN 10 (…)”). Sheet `MẪU` không được coi là một tuần — **trừ khi nó là sheet duy nhất của file** (file một tuần tạo thẳng từ mẫu, chưa đổi tên sheet): khi đó tuần lấy từ `A1` và sheet `MẪU` chính là sheet tuần được xử lý (đã chốt 23/11/2026).
+**\[ĐÃ CHỐT 23/11/2026, sửa lần 2\] Mỗi tuần thường là một file riêng; danh sách tuần lấy từ FILE NGUỒN.** Giáo viên chọn tuần trong các tuần của file nguồn (số tuần lấy từ tên sheet `TUẦN n`, hoặc từ ô `A1` nếu tên sheet khác; file nguồn chỉ có một sheet `MẪU` thì tuần lấy từ `A1`). Tuần được chọn ghi vào file đích như sau:
+
+- **File đích chỉ có một sheet và tên sheet không phải “TUẦN n”** (ví dụ `MẪU`, `Sheet1` — file một tuần tạo từ mẫu): sheet đó nhận **bất kỳ tuần nào** được chọn, **mỗi lần một tuần**. Tên bài, đồ dùng, tiêu đề và ngày tháng của tuần đó được điền vào, và **tên tab đổi thành “TUẦN n”** (ví dụ `MẪU` → `TUẦN 8`; đã chốt 23/11/2026). Đổi tên bằng cách sửa `xl/workbook.xml` (kèm tên sheet trong vùng in/tên vùng) và `docProps/app.xml`; màn xem trước và kết quả hiển thị việc đổi tên.
+- **File đích có các sheet “TUẦN n”** (hoặc nhiều sheet có `A1` “TUẦN n…”): tuần nào có sheet tương ứng thì điền vào sheet đó; tuần không có sheet → `TARGET_WEEK_SHEET_MISSING`. Sheet `MẪU` trong file nhiều sheet bị bỏ qua.
+- File đích nhiều sheet mà không sheet nào là tuần → `NO_TARGET_WEEK_SHEETS`.
 
 ## 4.2. File nguồn
 
@@ -216,14 +222,14 @@ Giao diện phải có hướng dẫn ngắn kèm hình minh họa cho bước n
 
 ## 4.5. Trạng thái sheet tuần trong file đích \[ĐÃ CHỐT\]
 
-Danh sách tuần = **các tuần có trong file đích** (mục 4.1). Với mỗi tuần, hệ thống tìm tuần tương ứng ở file nguồn và phân loại sheet đích:
+Danh sách tuần = **các tuần của file nguồn** (mục 4.1). Với mỗi tuần, hệ thống xác định sheet đích (sheet duy nhất của file đích, hoặc sheet “TUẦN n”) và phân loại:
 
 | Trạng thái | Điều kiện | Hành động |
 |---|---|---|
 | `ready` | Có sheet tuần, mọi ô tên bài đều trống | Xử lý |
 | `has_data` | Có sheet tuần, có ít nhất một ô tên bài đã có nội dung | **Không xử lý**, báo "Sheet TUẦN X đã có dữ liệu" |
 | `invalid_structure` | Không tìm được bảng (theo tọa độ cố định lẫn theo nội dung), hoặc có ô gộp che ô tên bài/đồ dùng | **Không xử lý**, báo lý do |
-| (nguồn thiếu) | File nguồn không có tuần này | **Không xử lý**, báo `SOURCE_WEEK_SHEET_MISSING` |
+| `missing` | File đích có sheet “TUẦN n” nhưng không có sheet cho tuần này | **Không xử lý**, báo `TARGET_WEEK_SHEET_MISSING` |
 
 Ghi chú:
 
@@ -437,7 +443,7 @@ Quy tắc:
 
 - Copy **nguyên văn** chuỗi từ các ô trên của file nguồn sang sheet đích, kể cả dấu cách đầu dòng. Không tự dựng lại chuỗi, vì hai lớp cùng trường dùng chung lịch.
 - **\[ĐÃ CHỐT 20/11/2026\]** Với mỗi tuần được chọn và không bị chặn, tiêu đề tuần, ngày từng thứ và ngày ký **luôn** được sửa theo nguồn — kể cả khi không môn nào được điền. Chỉ ghi các ô có giá trị khác file đích (`header_changes`); màn xem trước liệt kê từng thay đổi “hiện tại → sẽ đổi thành”.
-- Tên tab sheet không bao giờ bị đổi (hệ thống tìm sheet theo tên tab).
+- Tên tab chỉ bị đổi trong trường hợp file đích một sheet (mục 4.1): đổi thành “TUẦN n”. File đích có sheet “TUẦN n” thì không đổi tên tab.
 - Trước khi copy, parse để kiểm tra: số tuần trong `A1` khớp tên sheet; ngày trong `A3…A29` nằm trong khoảng ngày của `A1`; `E35` đúng mẫu "Ngày d tháng m năm yyyy". Không khớp → lỗi chặn tuần `INVALID_SOURCE_DATE`.
 - `E36` ("BGH duyệt") và hàng tiêu đề `A2:F2` là nội dung cố định, không ghi.
 - Không thay đổi ô nào ngoài các ô đã khai báo.

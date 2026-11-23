@@ -97,6 +97,7 @@ class TimetableJobController extends Controller
             'download_url' => url("/api/v1/timetable/jobs/{$job->id}/download"),
             'weeks_filled' => $summary['weeks_filled'],
             'cells_written' => $summary['cells_written'],
+            'renamed_sheets' => $summary['renamed_sheets'] ?? [],
             'manual_todo' => $summary['manual_todo'],
         ]]);
     }
@@ -147,6 +148,9 @@ class TimetableJobController extends Controller
             'subjects' => $weeks['subjects'] ?? [],
             'default_selected_subjects' => $weeks['default_selected_subjects'] ?? [],
             'days' => $weeks['days'] ?? [],
+            // One-sheet target (e.g. a file made from the template): one week per run.
+            'single_target_sheet' => $weeks['single_target_sheet'] ?? null,
+            'max_weeks' => $weeks['max_weeks'] ?? null,
         ];
     }
 

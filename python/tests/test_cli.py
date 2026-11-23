@@ -85,10 +85,12 @@ def test_target_without_template_sheet_works(tmp_path):
 def test_list_weeks_statuses_and_subjects(tmp_path):
     cli("list-weeks", job(tmp_path))
     data = read(tmp_path, "weeks.json")
-    # Only weeks present in the TARGET are listed (the target has TUẦN 8 only; source weeks 1–9 are ignored).
+    # Weeks come from the SOURCE (1–9). The target has MẪU + TUẦN 8, so only week 8 has a sheet.
     statuses = {w["week_number"]: w["target_status"] for w in data["weeks"]}
-    assert statuses == {8: "ready"}
+    assert statuses == {**{n: "missing" for n in range(1, 10)}, 8: "ready"}
     assert [w["week_number"] for w in data["weeks"] if w["selectable"]] == [8]
+    assert data["weeks"][0]["errors"][0]["code"] == "TARGET_WEEK_SHEET_MISSING"
+    assert data["single_target_sheet"] is None and data["max_weeks"] is None
     assert "HĐTV/HĐTT" in data["subjects"] and "HĐTV" not in data["subjects"]
     assert data["days"][0] == {"label": "Hai", "sessions": ["SÁNG", "CHIỀU"]}
     assert [d["label"] for d in data["days"]] == ["Hai", "Ba", "Tư", "Năm", "Sáu"]
@@ -96,51 +98,74 @@ def test_list_weeks_statuses_and_subjects(tmp_path):
         "Tiếng Việt", "Toán", "Khoa học", "Đạo đức", "HĐTN", "HĐTN (SHDC)", "HĐTN (SHL)", "GDTC chung"}
 
 
-def test_target_week_missing_in_source_is_reported(tmp_path):
-    job(tmp_path)
-    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input: add a TUẦN 12 sheet
-    wb.copy_worksheet(wb["TUẦN 8"]).title = "TUẦN 12"
-    wb.save(tmp_path / "target.xlsx")
-    cli("list-weeks", tmp_path)
-    weeks = {w["week_number"]: w for w in read(tmp_path, "weeks.json")["weeks"]}
-    assert sorted(weeks) == [8, 12]
-    assert weeks[8]["selectable"] is True
-    assert weeks[12]["selectable"] is False
-    assert weeks[12]["errors"][0]["code"] == "SOURCE_WEEK_SHEET_MISSING"
+def _standard_target(tmp_path, sheet_name=None):
+    """Target = the new standard file (header row 3, only a MẪU sheet), optionally renamed."""
+    job(tmp_path, target="mau_lbg_moi.xlsx")
+    if sheet_name:
+        wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input only
+        wb["MẪU"].title = sheet_name
+        wb.save(tmp_path / "target.xlsx")
 
 
-def test_single_template_sheet_is_the_week(tmp_path):
-    """A one-week file made from the template keeps the sheet name MẪU; its week comes from A1."""
-    job(tmp_path, target="mau_lbg_moi.xlsx")  # only the MẪU sheet, A1 = "TUẦN 01 (…)"
+@pytest.mark.parametrize("sheet_name", [None, "Sheet1"])
+def test_single_sheet_target_accepts_any_source_week(tmp_path, sheet_name):
+    """One-week target (only MẪU / Sheet1): every source week can be chosen, one at a time."""
+    _standard_target(tmp_path, sheet_name)
     cli("list-weeks", tmp_path)
-    weeks = read(tmp_path, "weeks.json")["weeks"]
-    assert [(w["week_number"], w["target_sheet"], w["selectable"]) for w in weeks] == [(1, "MẪU", True)]
+    data = read(tmp_path, "weeks.json")
+    sheet = sheet_name or "MẪU"
+    assert [(w["week_number"], w["target_sheet"], w["selectable"]) for w in data["weeks"]] == [
+        (n, sheet, True) for n in range(1, 10)]
+    assert data["single_target_sheet"] == sheet and data["max_weeks"] == 1
+
+    # Choose week 7 although the template's A1 says "TUẦN 01": week 7 data + title/dates go into the sheet.
+    request(tmp_path, weeks=[7], selected_subjects=["Khoa học", "Đạo đức"])
+    cli("analyze", tmp_path)
+    week = read(tmp_path, "analysis.json")["weeks"][0]
+    assert week["status"] == "ready", week["errors"]
+    assert next(c for c in week["header_changes"] if c["field"] == "title")["to"].strip().startswith("TUẦN 07")
+    assert week["sheet_rename"] == {"from": sheet, "to": "TUẦN 7"}
+    cli("generate", tmp_path)
+    assert read(tmp_path, "generate.json")["renamed_sheets"] == [{"from": sheet, "to": "TUẦN 7"}]
+    out = openpyxl.load_workbook(tmp_path / "result.xlsx")
+    assert out.sheetnames == ["TUẦN 7"]  # tab renamed to the chosen week
+    with zipfile.ZipFile(tmp_path / "target.xlsx") as a, zipfile.ZipFile(tmp_path / "result.xlsx") as b:
+        changed = {n for n in a.namelist() if a.read(n) != b.read(n)}
+    # Only the sheet itself and the parts holding sheet names may change.
+    assert {"xl/worksheets/sheet1.xml", "xl/workbook.xml"} <= changed
+    assert changed <= {"xl/worksheets/sheet1.xml", "xl/workbook.xml", "docProps/app.xml"}
+    ws = out["TUẦN 7"]
+    assert ws["A1"].value.strip().startswith("TUẦN 07") and ws["A4"].value == "Hai (19/10)"
+    src = openpyxl.load_workbook(FIXTURES / "lbg_mau.xlsx")["TUẦN 7"]
+    assert ws["E10"].value == src["E8"].value  # Khoa học: source Monday row 8 -> standard target row 10
+
+
+def test_single_sheet_target_takes_one_week_per_run(tmp_path):
+    _standard_target(tmp_path)
+    request(tmp_path, weeks=[7, 8], selected_subjects=["Toán"])
+    cli("analyze", tmp_path, expect=1)
+    error = read(tmp_path, "analysis.json")["error"]
+    assert error["code"] == "INVALID_REQUEST" and "một tuần" in error["message"]
+
+
+def test_single_sheet_named_as_week_is_bound_to_that_week(tmp_path):
+    _standard_target(tmp_path, "TUẦN 1")
+    cli("list-weeks", tmp_path)
+    data = read(tmp_path, "weeks.json")
+    assert data["single_target_sheet"] is None
+    assert [w["week_number"] for w in data["weeks"] if w["selectable"]] == [1]
     request(tmp_path, weeks=[1], selected_subjects=["Toán"])
     cli("analyze", tmp_path)
-    cli("generate", tmp_path)
-    out = openpyxl.load_workbook(tmp_path / "result.xlsx")["MẪU"]
-    assert out["E7"].value  # first Toán period of the standard layout is filled
+    assert read(tmp_path, "analysis.json")["weeks"][0]["sheet_rename"] is None  # already named, no rename
 
 
-@pytest.mark.parametrize("case", ["template_with_other_sheet", "template_without_week_title"])
-def test_target_without_week_sheets(tmp_path, case):
-    job(tmp_path, target="mau_lbg_moi.xlsx")
-    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input only
-    if case == "template_with_other_sheet":
-        wb.create_sheet("Ghi chú")         # MẪU is not the only sheet any more -> not a week
-    else:
-        wb["MẪU"]["A1"] = "LỊCH BÁO GIẢNG"  # only sheet, but no "TUẦN n" title
+def test_target_without_week_sheets(tmp_path):
+    _standard_target(tmp_path)
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input: 2 sheets, none is a week
+    wb.create_sheet("Ghi chú")
     wb.save(tmp_path / "target.xlsx")
     cli("list-weeks", tmp_path, expect=1)
     assert read(tmp_path, "weeks.json")["error"]["code"] == "NO_TARGET_WEEK_SHEETS"
-
-
-def _standard_target(tmp_path, sheet_name):
-    """Target = the new standard file (header row 3) with MẪU turned into one week sheet."""
-    job(tmp_path, target="mau_lbg_moi.xlsx")
-    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input only
-    wb["MẪU"].title = sheet_name
-    wb.save(tmp_path / "target.xlsx")
 
 
 def test_old_layout_source_into_standard_layout_target(tmp_path):
@@ -163,13 +188,6 @@ def test_old_layout_source_into_standard_layout_target(tmp_path):
     assert out["E3"].value == "Tên bài"  # header row untouched
     with zipfile.ZipFile(tmp_path / "target.xlsx") as a, zipfile.ZipFile(tmp_path / "result.xlsx") as b:
         assert [n for n in a.namelist() if a.read(n) != b.read(n)] == ["xl/worksheets/sheet1.xml"]
-
-
-def test_week_taken_from_title_when_sheet_name_is_not_a_week(tmp_path):
-    _standard_target(tmp_path, "Sheet1")  # one-week file; A1 = "TUẦN 01 (…)"
-    cli("list-weeks", tmp_path)
-    weeks = read(tmp_path, "weeks.json")["weeks"]
-    assert [(w["week_number"], w["target_sheet"], w["selectable"]) for w in weeks] == [(1, "Sheet1", True)]
 
 
 # --- analyze + generate ---------------------------------------------------------------------------

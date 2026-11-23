@@ -93,20 +93,20 @@ describe('days off', () => {
 
 describe('unavailable weeks', () => {
   const weeks = [
-    { week_number: 9, selectable: false, target_status: 'ready', errors: [{ code: 'SOURCE_WEEK_SHEET_MISSING', message: 'x' }] },
-    { week_number: 11, selectable: false, target_status: 'ready', errors: [{ code: 'SOURCE_WEEK_SHEET_MISSING', message: 'x' }] },
+    { week_number: 9, selectable: false, target_status: 'ready', errors: [{ code: 'TARGET_WEEK_SHEET_MISSING', message: 'x' }] },
+    { week_number: 11, selectable: false, target_status: 'ready', errors: [{ code: 'TARGET_WEEK_SHEET_MISSING', message: 'x' }] },
     { week_number: 3, selectable: false, target_status: 'has_data', errors: [{ code: 'TARGET_WEEK_HAS_DATA', message: 'y' }] },
     { week_number: 4, selectable: false, target_status: 'invalid_structure', errors: [{ code: 'INVALID_SHEET_STRUCTURE', message: 'Sai cấu trúc' }] },
     { week_number: 10, selectable: true, target_status: 'ready', errors: [] },
   ]
 
   it('classifies each week', () => {
-    expect(weeks.map(weekProblem)).toEqual(['source_missing', 'source_missing', 'has_data', 'error', null])
+    expect(weeks.map(weekProblem)).toEqual(['target_missing', 'target_missing', 'has_data', 'error', null])
   })
 
-  it('groups source-missing / has-data weeks and keeps other errors separate', () => {
+  it('groups target-missing / has-data weeks and keeps other errors separate', () => {
     const groups = unavailableGroups(weeks)
-    expect(groups.map((g) => g.title)).toEqual(['File nguồn không có tuần này', 'Sheet đã có dữ liệu (bỏ qua)', 'Tuần 4'])
+    expect(groups.map((g) => g.title)).toEqual(['File đích không có sheet cho tuần này', 'Sheet đã có dữ liệu (bỏ qua)', 'Tuần 4'])
     expect(groups[0].text).toMatch(/^Tuần 9, Tuần 11 — /)
     expect(groups[2].text).toBe('Sai cấu trúc')
   })
