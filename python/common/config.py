@@ -1,7 +1,7 @@
 """Load and sanity-check the JSON configuration files in python/config/.
 
-All cell coordinates live in template_profile.json; nothing in the engine may hardcode them
-(DETAIL_DESIGN §8.2, CLAUDE.md rule 4).
+Default (fixed) coordinates live in template_profile.json; sheets that do not match them are
+located by content (common/layout.py). Nothing in the engine may hardcode coordinates (DETAIL_DESIGN §8.2).
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ def _load_json(path: Path) -> dict:
 
 
 def _validate_profile(profile: dict) -> None:
-    for key in ("template_sheet", "week_sheet_pattern", "cells", "structure_anchors",
-                "expected_merged_ranges", "days", "columns"):
+    for key in ("template_sheet", "week_sheet_pattern", "header_row", "cells", "structure_anchors",
+                "days", "columns"):
         if key not in profile:
             raise ConfigError(f"template_profile.json: missing '{key}'")
 

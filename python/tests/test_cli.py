@@ -85,14 +85,91 @@ def test_target_without_template_sheet_works(tmp_path):
 def test_list_weeks_statuses_and_subjects(tmp_path):
     cli("list-weeks", job(tmp_path))
     data = read(tmp_path, "weeks.json")
+    # Only weeks present in the TARGET are listed (the target has TUẦN 8 only; source weeks 1–9 are ignored).
     statuses = {w["week_number"]: w["target_status"] for w in data["weeks"]}
-    assert statuses == {**{n: "missing" for n in range(1, 10)}, 8: "ready"}
+    assert statuses == {8: "ready"}
     assert [w["week_number"] for w in data["weeks"] if w["selectable"]] == [8]
     assert "HĐTV/HĐTT" in data["subjects"] and "HĐTV" not in data["subjects"]
     assert data["days"][0] == {"label": "Hai", "sessions": ["SÁNG", "CHIỀU"]}
     assert [d["label"] for d in data["days"]] == ["Hai", "Ba", "Tư", "Năm", "Sáu"]
     assert set(data["default_selected_subjects"]) == {
         "Tiếng Việt", "Toán", "Khoa học", "Đạo đức", "HĐTN", "HĐTN (SHDC)", "HĐTN (SHL)", "GDTC chung"}
+
+
+def test_target_week_missing_in_source_is_reported(tmp_path):
+    job(tmp_path)
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input: add a TUẦN 12 sheet
+    wb.copy_worksheet(wb["TUẦN 8"]).title = "TUẦN 12"
+    wb.save(tmp_path / "target.xlsx")
+    cli("list-weeks", tmp_path)
+    weeks = {w["week_number"]: w for w in read(tmp_path, "weeks.json")["weeks"]}
+    assert sorted(weeks) == [8, 12]
+    assert weeks[8]["selectable"] is True
+    assert weeks[12]["selectable"] is False
+    assert weeks[12]["errors"][0]["code"] == "SOURCE_WEEK_SHEET_MISSING"
+
+
+def test_single_template_sheet_is_the_week(tmp_path):
+    """A one-week file made from the template keeps the sheet name MẪU; its week comes from A1."""
+    job(tmp_path, target="mau_lbg_moi.xlsx")  # only the MẪU sheet, A1 = "TUẦN 01 (…)"
+    cli("list-weeks", tmp_path)
+    weeks = read(tmp_path, "weeks.json")["weeks"]
+    assert [(w["week_number"], w["target_sheet"], w["selectable"]) for w in weeks] == [(1, "MẪU", True)]
+    request(tmp_path, weeks=[1], selected_subjects=["Toán"])
+    cli("analyze", tmp_path)
+    cli("generate", tmp_path)
+    out = openpyxl.load_workbook(tmp_path / "result.xlsx")["MẪU"]
+    assert out["E7"].value  # first Toán period of the standard layout is filled
+
+
+@pytest.mark.parametrize("case", ["template_with_other_sheet", "template_without_week_title"])
+def test_target_without_week_sheets(tmp_path, case):
+    job(tmp_path, target="mau_lbg_moi.xlsx")
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input only
+    if case == "template_with_other_sheet":
+        wb.create_sheet("Ghi chú")         # MẪU is not the only sheet any more -> not a week
+    else:
+        wb["MẪU"]["A1"] = "LỊCH BÁO GIẢNG"  # only sheet, but no "TUẦN n" title
+    wb.save(tmp_path / "target.xlsx")
+    cli("list-weeks", tmp_path, expect=1)
+    assert read(tmp_path, "weeks.json")["error"]["code"] == "NO_TARGET_WEEK_SHEETS"
+
+
+def _standard_target(tmp_path, sheet_name):
+    """Target = the new standard file (header row 3) with MẪU turned into one week sheet."""
+    job(tmp_path, target="mau_lbg_moi.xlsx")
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input only
+    wb["MẪU"].title = sheet_name
+    wb.save(tmp_path / "target.xlsx")
+
+
+def test_old_layout_source_into_standard_layout_target(tmp_path):
+    _standard_target(tmp_path, "TUẦN 1")
+    request(tmp_path, weeks=[1], selected_subjects=["Toán", "Tiếng Việt", "Khoa học"])
+    cli("analyze", tmp_path)
+    week = read(tmp_path, "analysis.json")["weeks"][0]
+    assert week["status"] == "ready", week["errors"]
+    assert {s["subject"]: s["status"] for s in week["subjects"]} == {
+        "Toán": "matched", "Tiếng Việt": "matched", "Khoa học": "matched"}
+    sign = next(c for c in week["header_changes"] if c["field"] == "sign_date")
+    assert sign["cell"] == "E36"  # target's own cell (source uses E35)
+
+    cli("generate", tmp_path)
+    out = openpyxl.load_workbook(tmp_path / "result.xlsx")["TUẦN 1"]
+    src = openpyxl.load_workbook(FIXTURES / "lbg_mau.xlsx")["TUẦN 1"]
+    src_toan = [src[f"E{r}"].value for r in range(3, 35) if src[f"D{r}"].value == "Toán"]
+    assert [out[f"E{r}"].value for r in (7, 14, 22, 25, 33)] == src_toan  # standard layout rows
+    assert "04 tháng 9" in out["E36"].value
+    assert out["E3"].value == "Tên bài"  # header row untouched
+    with zipfile.ZipFile(tmp_path / "target.xlsx") as a, zipfile.ZipFile(tmp_path / "result.xlsx") as b:
+        assert [n for n in a.namelist() if a.read(n) != b.read(n)] == ["xl/worksheets/sheet1.xml"]
+
+
+def test_week_taken_from_title_when_sheet_name_is_not_a_week(tmp_path):
+    _standard_target(tmp_path, "Sheet1")  # one-week file; A1 = "TUẦN 01 (…)"
+    cli("list-weeks", tmp_path)
+    weeks = read(tmp_path, "weeks.json")["weeks"]
+    assert [(w["week_number"], w["target_sheet"], w["selectable"]) for w in weeks] == [(1, "Sheet1", True)]
 
 
 # --- analyze + generate ---------------------------------------------------------------------------
@@ -208,11 +285,63 @@ def test_generate_refuses_outdated_analysis(tmp_path, change):
 
 def test_nothing_to_generate(tmp_path):
     job(tmp_path)
-    request(tmp_path, weeks=[8], selected_subjects=["HĐTN (SHDC)"])
+    request(tmp_path, weeks=[3], selected_subjects=["Toán"])  # week 3 has no sheet in the target
     cli("analyze", tmp_path)
     assert read(tmp_path, "analysis.json")["can_generate"] is False
     cli("generate", tmp_path, expect=1)
     assert read(tmp_path, "generate.json")["error"]["code"] == "NOTHING_TO_GENERATE"
+
+
+def _target_with_week_7_copied_from_week_8(tmp_path):
+    """Teacher copied the target's TUẦN 8 sheet as TUẦN 7 but did not fix its title/dates."""
+    job(tmp_path)
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # throwaway copy; openpyxl save is fine for test input
+    wb["TUẦN 8"].title = "TUẦN 7"
+    wb.save(tmp_path / "target.xlsx")
+
+
+def test_title_and_dates_follow_source_and_are_previewed(tmp_path):
+    _target_with_week_7_copied_from_week_8(tmp_path)
+    request(tmp_path, weeks=[7], selected_subjects=["Khoa học"])
+    cli("analyze", tmp_path)
+    changes = {c["cell"]: c for c in read(tmp_path, "analysis.json")["weeks"][0]["header_changes"]}
+    assert changes["A1"]["label"] == "Tiêu đề tuần"
+    assert changes["A1"]["from"].strip().startswith("TUẦN 08")
+    assert changes["A1"]["to"].strip() == "TUẦN 07 (Từ 19/10/2026 đến 23/10/2026)"
+    assert (changes["A3"]["label"], changes["A3"]["from"], changes["A3"]["to"]) == ("Thứ Hai", "Hai (26/10)", "Hai (19/10)")
+    assert changes["E35"]["from"] is None and "16 tháng 10" in changes["E35"]["to"]
+
+    cli("generate", tmp_path)
+    ws = openpyxl.load_workbook(tmp_path / "result.xlsx")["TUẦN 7"]
+    assert ws["A1"].value.strip().startswith("TUẦN 07") and ws["A29"].value == "Sáu (23/10)"
+
+
+def test_title_and_dates_fixed_even_when_no_subject_is_filled(tmp_path):
+    _target_with_week_7_copied_from_week_8(tmp_path)
+    # Thursday of week 7 is a day off: Toán is skipped, nothing else selected
+    request(tmp_path, weeks=[7], selected_subjects=["Toán"])
+    cli("analyze", tmp_path)
+    analysis = read(tmp_path, "analysis.json")
+    week = analysis["weeks"][0]
+    assert [s["status"] for s in week["subjects"]] == ["skipped_day_off"]
+    assert analysis["can_generate"] is True
+    assert set(week["writes"]) == {c["cell"] for c in week["header_changes"]}
+
+    cli("generate", tmp_path)
+    ws = openpyxl.load_workbook(tmp_path / "result.xlsx")["TUẦN 7"]
+    assert ws["A1"].value.strip().startswith("TUẦN 07")
+    assert ws["E7"].value is None  # no lesson written
+
+
+def test_no_header_change_when_target_already_matches(tmp_path):
+    job(tmp_path, target="lbg_mau.xlsx")
+    wb = openpyxl.load_workbook(tmp_path / "target.xlsx")  # test input: empty the lessons of TUẦN 8
+    for row in range(3, 35):
+        wb["TUẦN 8"][f"E{row}"] = None
+    wb.save(tmp_path / "target.xlsx")
+    request(tmp_path, weeks=[8], selected_subjects=["Toán"])
+    cli("analyze", tmp_path)
+    assert read(tmp_path, "analysis.json")["weeks"][0]["header_changes"] == []
 
 
 def test_invalid_request(tmp_path):

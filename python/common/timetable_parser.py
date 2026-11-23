@@ -1,4 +1,4 @@
-"""Read one week sheet into ordered slots using the fixed coordinates of template_profile.json (§8.2, §8.7)."""
+"""Read one week sheet into ordered slots using its resolved Layout (§8.2, §8.7)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from openpyxl.worksheet.worksheet import Worksheet
 
+from .layout import Layout
 from .normalization import SubjectNormalizer, clean_text, raw_text
 
 
@@ -35,7 +36,11 @@ class Slot:
 class WeekSheet:
     name: str
     slots: list[Slot]
-    header: dict[str, str | None] = field(default_factory=dict)  # cell -> verbatim text (title, day dates, sign date)
+    layout: Layout | None = None
+    # Semantic key ('title', 'day:Hai'…, 'sign_date') -> verbatim text / cell on THIS sheet.
+    # Keys (not cells) are compared between source and target, so different layouts still match.
+    header: dict[str, str | None] = field(default_factory=dict)
+    header_cell: dict[str, str] = field(default_factory=dict)
 
     def by_subject(self) -> dict[str, list[Slot]]:
         """Subject key -> slots in row order. Slots without a subject are ignored."""
@@ -46,18 +51,12 @@ class WeekSheet:
         return groups
 
 
-def header_cells(profile: dict) -> list[str]:
-    cells = [profile["cells"]["week_title"]]
-    cells += [day["date_cell"] for day in profile["days"]]
-    cells.append(profile["cells"]["sign_date"])
-    return cells
-
-
-def parse_week_sheet(ws: Worksheet, profile: dict, normalizer: SubjectNormalizer) -> WeekSheet:
-    cols = profile["columns"]
+def parse_week_sheet(ws: Worksheet, layout: Layout, normalizer: SubjectNormalizer) -> WeekSheet:
+    cols = layout.columns
+    period_col = cols.get("period")
     slots: list[Slot] = []
-    for day in profile["days"]:
-        for session, (first, last) in day["sessions"].items():
+    for day in layout.days:
+        for session, (first, last) in day.sessions.items():
             for row in range(first, last + 1):
                 subject_cell = f"{cols['subject']}{row}"
                 lesson_cell = f"{cols['lesson']}{row}"
@@ -65,10 +64,10 @@ def parse_week_sheet(ws: Worksheet, profile: dict, normalizer: SubjectNormalizer
                 subject_raw = clean_text(ws[subject_cell].value)
                 slots.append(Slot(
                     sheet=ws.title,
-                    day=day["label"],
+                    day=day.label,
                     session=session,
                     row=row,
-                    period=clean_text(ws[f"{cols['period']}{row}"].value),
+                    period=clean_text(ws[f"{period_col}{row}"].value) if period_col else "",
                     subject_raw=subject_raw,
                     subject=normalizer.key(subject_raw),
                     lesson=raw_text(ws[lesson_cell].value),
@@ -77,5 +76,6 @@ def parse_week_sheet(ws: Worksheet, profile: dict, normalizer: SubjectNormalizer
                     lesson_cell=lesson_cell,
                     equipment_cell=equipment_cell,
                 ))
-    header = {cell: raw_text(ws[cell].value) for cell in header_cells(profile)}
-    return WeekSheet(name=ws.title, slots=slots, header=header)
+    cells = layout.header_cells()
+    header = {key: raw_text(ws[cell].value) for key, cell in cells.items()}
+    return WeekSheet(name=ws.title, slots=slots, layout=layout, header=header, header_cell=cells)

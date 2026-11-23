@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Info, Loader2 } from 'lucide-vue-next'
 import { useSyncStore } from '../../stores/sync'
-import { TARGET_STATUS, unavailableGroups } from '../../utils/timetable'
+import { unavailableGroups, weekProblem } from '../../utils/timetable'
 import AppPanel from '../ui/AppPanel.vue'
 
 const sync = useSyncStore()
@@ -13,8 +13,11 @@ const defaults = computed(() => sync.job?.default_selected_subjects ?? [])
 const reasons = computed(() => unavailableGroups(weeks.value))
 const canAnalyze = computed(() => sync.selectedWeeks.length > 0 && sync.selectedSubjects.length > 0 && !sync.busy)
 
+const PROBLEM_TEXT = { source_missing: 'File nguồn không có tuần này', has_data: 'Sheet đã có dữ liệu', error: 'Không đọc được sheet' }
+
 function tileClass(week) {
-  if (!week.selectable) return `off ${week.target_status}`
+  const problem = weekProblem(week)
+  if (problem) return `off ${problem}`
   return sync.selectedWeeks.includes(week.week_number) ? 'selected' : 'ready'
 }
 
@@ -33,7 +36,7 @@ function toggleSubject(subject) {
 
 <template>
   <AppPanel eyebrow="Bước 2 · Chọn tuần và môn" title="Đồng bộ tuần nào, môn nào?"
-             description="Chỉ chọn được tuần đã có sheet trống trong file đích. Môn không tích sẽ giữ nguyên như file đích.">
+             description="Các tuần có trong file đích. Chọn được khi file nguồn cũng có tuần đó và sheet tuần ở file đích còn trống. Môn không tích sẽ giữ nguyên như file đích.">
     <section class="group">
       <div class="group-head">
         <h3>Tuần <span class="muted count">{{ sync.selectedWeeks.length }}/{{ sync.selectableWeeks.length }} đã chọn</span></h3>
@@ -46,7 +49,7 @@ function toggleSubject(subject) {
       <div class="tiles weeks">
         <button v-for="week in weeks" :key="week.week_number" type="button" class="tile" :class="tileClass(week)"
                 :disabled="!week.selectable" :aria-pressed="sync.selectedWeeks.includes(week.week_number)"
-                :title="week.selectable ? `Tuần ${week.week_number}` : `Tuần ${week.week_number}: ${TARGET_STATUS[week.target_status] ?? ''}`"
+                :title="week.selectable ? `Tuần ${week.week_number}` : `Tuần ${week.week_number}: ${PROBLEM_TEXT[weekProblem(week)]}`"
                 @click="toggleWeek(week)">
           <span class="tile-label">Tuần</span>
           <span class="tile-num">{{ week.week_number }}</span>
@@ -56,8 +59,9 @@ function toggleSubject(subject) {
       <div class="legend small">
         <span><i class="sw selected"></i>Đã chọn</span>
         <span><i class="sw ready"></i>Sẵn sàng</span>
-        <span><i class="sw missing"></i>Chưa có sheet</span>
+        <span><i class="sw source_missing"></i>File nguồn không có</span>
         <span><i class="sw has_data"></i>Đã có dữ liệu</span>
+        <span><i class="sw error"></i>Không đọc được</span>
       </div>
 
       <ul v-if="reasons.length" class="reasons">
@@ -68,7 +72,7 @@ function toggleSubject(subject) {
       </ul>
       <p v-if="sync.selectableWeeks.length === 0" class="callout warn">
         <AlertTriangle />
-        <span>Chưa có tuần nào sẵn sàng. Hãy copy sheet MẪU thành các sheet tuần trong file đích (xem hướng dẫn) rồi tải lại file.</span>
+        <span>Chưa có tuần nào đồng bộ được. Kiểm tra file nguồn có đúng tuần của file đích không, và sheet tuần ở file đích còn trống.</span>
       </p>
     </section>
 
@@ -194,7 +198,7 @@ function toggleSubject(subject) {
   border-radius: 50%;
   background: var(--color-danger);
 }
-.tile.missing::after {
+.tile.source_missing::after {
   background: var(--color-warning);
 }
 .tile.has_data::after {
@@ -223,14 +227,16 @@ function toggleSubject(subject) {
   background: var(--color-primary-soft);
   border-color: var(--color-primary);
 }
-.sw.missing,
-.sw.has_data {
+.sw.source_missing,
+.sw.has_data,
+.sw.error {
   border-style: dashed;
   background: var(--color-surface-muted);
   position: relative;
 }
-.sw.missing::after,
-.sw.has_data::after {
+.sw.source_missing::after,
+.sw.has_data::after,
+.sw.error::after {
   content: '';
   position: absolute;
   top: -3px;
@@ -242,6 +248,9 @@ function toggleSubject(subject) {
 }
 .sw.has_data::after {
   background: var(--color-text-subtle);
+}
+.sw.error::after {
+  background: var(--color-danger);
 }
 
 .reasons {

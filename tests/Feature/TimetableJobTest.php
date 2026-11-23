@@ -66,7 +66,7 @@ class TimetableJobTest extends TestCase
         $weeks = collect($response->json('data.weeks'))->keyBy('week_number');
         $this->assertSame('ready', $weeks[8]['target_status']);
         $this->assertTrue($weeks[8]['selectable']);
-        $this->assertSame('missing', $weeks[7]['target_status']);
+        $this->assertSame([8], $weeks->keys()->all()); // only weeks present in the target are listed
         $this->assertEqualsCanonicalizing(
             [...self::DEFAULT_SUBJECTS, 'HĐTN (SHDC)'],
             $response->json('data.default_selected_subjects'),

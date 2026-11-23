@@ -19,8 +19,9 @@ from .day_off_detector import detect_off_sessions
 from .errors import EngineError, issue
 from .normalization import SubjectNormalizer
 from .timetable_matcher import DEFAULT_LESSON_MAX_CHARS, match_week
-from .timetable_parser import WeekSheet, header_cells, parse_week_sheet
-from .validators import source_date_issues, structure_problems, target_status
+from .layout import resolve_layout
+from .timetable_parser import WeekSheet, parse_week_sheet
+from .validators import source_date_issues, target_status
 from .workbook_reader import open_workbook, week_sheets
 from .workbook_writer import verify_written, write_workbook
 
@@ -60,8 +61,13 @@ def _load_inputs(job_dir: Path) -> Inputs:
     target = open_workbook(job_dir / TARGET, "File đích")
     source_weeks = week_sheets(source, profile)
     if not source_weeks:
-        raise EngineError("NO_WEEK_SHEETS", "File nguồn không có sheet tuần nào (tên dạng “TUẦN 1”).")
-    return Inputs(cfg, SubjectNormalizer(cfg.subjects), source, target, source_weeks, week_sheets(target, profile))
+        raise EngineError("NO_WEEK_SHEETS", "File nguồn không có sheet tuần nào (tên sheet hoặc ô tiêu đề dạng “TUẦN 10”).")
+    target_weeks = week_sheets(target, profile)
+    if not target_weeks:
+        raise EngineError("NO_TARGET_WEEK_SHEETS",
+                          "File đích không có sheet tuần nào. Đặt tên sheet dạng “TUẦN 10” "
+                          "(hoặc ô tiêu đề A1 bắt đầu bằng “TUẦN 10”).")
+    return Inputs(cfg, SubjectNormalizer(cfg.subjects), source, target, source_weeks, target_weeks)
 
 
 @dataclass
@@ -100,7 +106,8 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
         errors.append(issue("DUPLICATE_WEEK_SHEET", f"File nguồn có nhiều sheet cùng là tuần {no}: {', '.join(src_names)}.",
                             week=no, sheets=src_names))
     if not src_names:
-        errors.append(issue("SOURCE_WEEK_SHEET_MISSING", f"File nguồn không có sheet tuần {no}.", week=no))
+        errors.append(issue("SOURCE_WEEK_SHEET_MISSING",
+                            f"File nguồn không có tuần {no} — hãy chọn file nguồn có tuần này.", week=no))
 
     if len(dst_names) > 1:
         status = "duplicate"
@@ -112,11 +119,11 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
                             f"Chưa có sheet tuần {no} trong file đích — hãy tạo sheet tuần (copy sheet {profile['template_sheet']} "
                             f"hoặc một sheet tuần khác).", week=no))
     else:
-        problems = structure_problems(inp.target[dst_name], profile, allow_day_off_merges=False)
+        dst_layout, problems = resolve_layout(inp.target[dst_name], profile, strict_merges=True)
         if problems:
             status = "invalid_structure"
             errors.append(issue("INVALID_SHEET_STRUCTURE",
-                                f"Sheet {dst_name} của file đích không đúng cấu trúc mẫu: {'; '.join(problems)}.",
+                                f"Sheet {dst_name} của file đích không đọc được bảng: {'; '.join(problems)}.",
                                 week=no, sheet=dst_name, problems=problems))
         else:
             status = "ready"
@@ -124,16 +131,16 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
     inspection = WeekInspection(no, src_name, dst_name, status, errors)
 
     if src_name and len(src_names) == 1:
-        problems = structure_problems(inp.source[src_name], profile, allow_day_off_merges=True)
+        src_layout, problems = resolve_layout(inp.source[src_name], profile, strict_merges=False)
         if problems:
             errors.append(issue("INVALID_SHEET_STRUCTURE",
-                                f"Sheet {src_name} của file nguồn không đúng cấu trúc mẫu: {'; '.join(problems)}.",
+                                f"Sheet {src_name} của file nguồn không đọc được bảng: {'; '.join(problems)}.",
                                 week=no, sheet=src_name, problems=problems))
         else:
-            inspection.source = parse_week_sheet(inp.source[src_name], profile, inp.normalizer)
+            inspection.source = parse_week_sheet(inp.source[src_name], src_layout, inp.normalizer)
 
     if status == "ready":
-        inspection.target = parse_week_sheet(inp.target[dst_name], profile, inp.normalizer)
+        inspection.target = parse_week_sheet(inp.target[dst_name], dst_layout, inp.normalizer)
         if target_status(inspection.target) == "has_data":
             inspection.target_status = "has_data"
             errors.append(issue("TARGET_WEEK_HAS_DATA", f"Sheet {dst_name} đã có dữ liệu, bỏ qua.", week=no, sheet=dst_name))
@@ -142,14 +149,15 @@ def _inspect_week(no: int, inp: Inputs) -> WeekInspection:
 
 
 def _subject_list(inp: Inputs) -> list[str]:
-    """Subjects found in source week sheets and the target week sheets (+ MẪU if present), config order first."""
+    """Subjects found in the target week sheets and their source weeks, config order first."""
     profile, found = inp.cfg.profile, set()
-    sheets = [inp.source[n] for names in inp.source_weeks.values() for n in names]
-    sheets += [inp.target[n] for names in inp.target_weeks.values() for n in names]
-    if profile["template_sheet"] in inp.target.sheetnames:
-        sheets.append(inp.target[profile["template_sheet"]])
+    # Subjects of the weeks being processed: target week sheets and the matching source weeks.
+    sheets = [inp.target[n] for names in inp.target_weeks.values() for n in names]
+    sheets += [inp.source[n] for no in inp.target_weeks for n in inp.source_weeks.get(no, [])]
     for ws in sheets:
-        found.update(s.subject for s in parse_week_sheet(ws, profile, inp.normalizer).slots if s.subject)
+        layout, _ = resolve_layout(ws, profile, strict_merges=False)
+        if layout:
+            found.update(s.subject for s in parse_week_sheet(ws, layout, inp.normalizer).slots if s.subject)
     order = dict.fromkeys(inp.normalizer.key(s) for s in inp.cfg.subjects["subjects"])
     known = [s for s in order if s in found]
     return known + sorted(found - set(known))
@@ -157,7 +165,8 @@ def _subject_list(inp: Inputs) -> list[str]:
 
 def list_weeks(job_dir: Path) -> dict:
     inp = _load_inputs(job_dir)
-    weeks = [_inspect_week(no, inp).summary() for no in inp.source_weeks]
+    # Only the weeks present in the target are processed (one file per week is fine).
+    weeks = [_inspect_week(no, inp).summary() for no in inp.target_weeks]
     subjects = _subject_list(inp)
     excluded = set(inp.cfg.subjects.get("default_excluded_subjects", []))
     return {
@@ -183,6 +192,28 @@ def _validate_request(request: dict) -> dict:
     return {"weeks": sorted(set(weeks)), "selected_subjects": sorted(set(subjects)), "manual_days_off": manual}
 
 
+def _header_changes(source: WeekSheet, target: WeekSheet) -> list[dict]:
+    """Header cells (week title, day dates, signing date) whose target value differs from the source.
+
+    Compared by meaning ('title', 'day:Hai'…), so a source and a target with different layouts still match;
+    the change is written to the target's own cell.
+    """
+    changes = []
+    for key, cell in target.header_cell.items():
+        if key not in source.header:
+            continue
+        new, old = source.header[key], target.header.get(key)
+        if new != old:
+            if key == "title":
+                field, label = "title", "Tiêu đề tuần"
+            elif key == "sign_date":
+                field, label = "sign_date", "Ngày ký"
+            else:
+                field, label = "day_date", f"Thứ {key.split(':', 1)[1]}"
+            changes.append({"cell": cell, "field": field, "label": label, "from": old, "to": new})
+    return changes
+
+
 def analyze(job_dir: Path) -> dict:
     request = _validate_request(read_json(job_dir / REQUEST))
     inp = _load_inputs(job_dir)
@@ -194,12 +225,13 @@ def analyze(job_dir: Path) -> dict:
     weeks = []
     for no in request["weeks"]:
         ins = _inspect_week(no, inp)
-        week = {**ins.summary(), "status": "blocked", "days_off": [], "subjects": [], "warnings": [], "writes": {}}
+        week = {**ins.summary(), "status": "blocked", "days_off": [], "subjects": [], "warnings": [],
+                "header_changes": [], "writes": {}}
         weeks.append(week)
         if not ins.selectable or ins.source is None:
             continue
 
-        date_errors = source_date_issues(ins.source, no, profile)
+        date_errors = source_date_issues(ins.source, no)
         if date_errors:
             week["errors"].extend(date_errors)
             continue
@@ -209,11 +241,12 @@ def analyze(job_dir: Path) -> dict:
         match = match_week(ins.source, ins.target, week_no=no, selected_subjects=selected, off_sessions=off,
                            normalizer=inp.normalizer, keywords=keywords, lesson_max_chars=max_chars)
 
+        # Title, day dates and signing date always follow the source for a selected week, even when no
+        # subject can be filled; only cells that actually differ are written (and shown in the preview).
+        changes = _header_changes(ins.source, ins.target)
         week.update(status="ready", days_off=[o.to_dict() for o in off], subjects=match.subjects,
-                    warnings=match.warnings)
-        if match.matched_count:
-            header = {cell: ins.source.header.get(cell) for cell in header_cells(profile)}
-            week["writes"] = {**header, **match.writes}
+                    warnings=match.warnings, header_changes=changes)
+        week["writes"] = {**{c["cell"]: c["to"] for c in changes}, **match.writes}
 
     result = {
         "success": True,
@@ -243,9 +276,18 @@ def generate(job_dir: Path) -> dict:
     profile = load_config().profile
     edits = {w["target_sheet"]: w["writes"] for w in analysis["weeks"] if w["status"] == "ready" and w["writes"]}
 
+    # Whitelist per sheet comes from re-reading the target's layout, not from analysis.json.
+    target = open_workbook(job_dir / TARGET, "File đích")
+    allowed = {}
+    for sheet in edits:
+        layout, problems = resolve_layout(target[sheet], profile, strict_merges=True)
+        if layout is None:
+            raise EngineError("INVALID_SHEET_STRUCTURE", f"Sheet {sheet} của file đích không đọc được bảng: {'; '.join(problems)}.")
+        allowed[sheet] = layout.allowed_cells()
+
     tmp = job_dir / "result.partial.xlsx"  # openpyxl (used by verify) only opens *.xlsx names
     try:
-        write_workbook(job_dir / TARGET, tmp, edits, profile)
+        write_workbook(job_dir / TARGET, tmp, edits, allowed)
         verify_written(job_dir / TARGET, tmp, edits)
         os.replace(tmp, job_dir / RESULT)
     finally:

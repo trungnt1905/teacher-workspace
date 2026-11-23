@@ -10,8 +10,8 @@ Single Laravel app at the repo root serves both the UI and the API (same origin,
 - `app/`, `routes/api.php`, `config/` — Laravel API under `/api/v1` (no database in MVP).
 - `resources/js/` — Vue 3 SPA (vue-router, pinia, axios) built by Vite via `laravel-vite-plugin`.
 - `routes/web.php` + `resources/views/app.blade.php` — every non-`/api` path returns the SPA shell.
-- `python/` — Excel engine. Coordinates in `python/config/template_profile.json`, subjects in `python/config/subject_config.json`.
-- `python/tests/fixtures/` — the teacher's real sample workbooks: `lbg_mau.xlsx` (source, `MẪU` + TUẦN 1–9, TUẦN 7 has a day off) and `tuan8_lop_dich.xlsx` (target class, different timetable).
+- `python/` — Excel engine. Fixed coordinates of the standard file `MAU_LBG.xlsx` in `python/config/template_profile.json`; `python/common/layout.py` falls back to finding the table by content (header row, day/session merges) for other layouts. Subjects in `python/config/subject_config.json`.
+- `python/tests/fixtures/` — real sample workbooks: `mau_lbg_moi.xlsx` (current standard layout, header row 3, only `MẪU`), `lbg_mau.xlsx` (old layout, source, `MẪU` + TUẦN 1–9, TUẦN 7 has a day off) and `tuan8_lop_dich.xlsx` (old layout, target class, different timetable).
 - `app/Auth/EnvUserProvider.php` — single account from `ADMIN_EMAIL` / `ADMIN_PASSWORD_HASH` (no DB). `php artisan admin:password` prints a hash.
 - `app/Services/Timetable/` — `JobStore` (job dirs, meta.json, ownership, expiry, locking) and `PythonEngine` (runs the CLI, maps exit codes to `ApiException`).
 - The `api` middleware group has cookies + session + CSRF prepended (`bootstrap/app.php`); all API errors use `{success:false,error:{code,message,details}}`.
@@ -36,12 +36,12 @@ php artisan serve & npm run dev                    # local dev at http://127.0.0
 
 1. Read the whole design doc before coding; implement phase by phase; run all tests after each phase and report results.
 2. Do not expand scope. No database, queue, Redis or microservice in the MVP unless asked.
-3. Never hardcode Excel coordinates in code — use `template_profile.json`.
+3. Never hardcode Excel coordinates in code — use `template_profile.json` + `layout.resolve_layout()` (each sheet gets its own `Layout`).
 4. No AI for distributing lessons. Match by subject in row order (§4.6), never by source row position.
 5. Read workbooks with openpyxl; **write by patching sheet XML in place** (§5.3). Never call `openpyxl` `save()` for output: it rewrites merged-cell styles and row heights in every sheet (proven in Phase 0).
-6. Never create, delete or rename sheets; never modify sheet `MẪU`; never change styles; never copy styles from the source.
+6. Never create, delete or rename sheets; never modify sheet `MẪU` (exception: when `MẪU` is the workbook's only sheet it IS the week sheet, rule 17); never change styles; never copy styles from the source.
 7. Never overwrite the uploaded source/target files; output is always a new file.
-8. Allowed writes per week sheet: `A1`, `A3`, `A10`, `A17`, `A23`, `A29`, `E35`, `E3:E34`, `F3:F34`; column `D` only for the HĐTV/HĐTT interchangeable group (§4.10).
+8. Allowed writes per week sheet = `Layout.allowed_cells()`: title `A1`, the 5 day-date cells, the signing-date cell, lesson/equipment cells of period rows; subject column only for the HĐTV/HĐTT group (§4.10). For the standard file: `A1`, `A4`, `A11`, `A18`, `A24`, `A30`, `E36`, `E4:F35`.
 9. When unsure (count mismatch, day off, empty lesson, unknown subject): skip that subject for that week and report it — never guess (§4.7, §4.8).
 10. Every skipped week/subject must carry an error code and concrete details (§9.7).
 11. Python job commands write results to a JSON file in the job dir, logs to stderr, exit 0/1/2 (§8.3). stdout is not a result channel.
@@ -50,3 +50,4 @@ php artisan serve & npm run dev                    # local dev at http://127.0.0
 14. Ask when a requirement is unclear instead of assuming. Keep code readable; no abstraction for a single use.
 15. Update README and docs at the end of each phase.
 16. UI follows [docs/design-system.md](docs/design-system.md): colours only via semantic `--color-*` tokens from `resources/css/tokens.css` (no hex/rgb, no palette tokens in components); reuse `.btn`/`.card`/`.pill`/`.callout`/`.icon-tile` and `components/ui/` (`PageHeader`, `AppPanel`); icons from `lucide-vue-next`. Desktop browsers only — no phone layouts. `npm test` enforces the colour rules.
+17. Weeks processed = weeks present in the TARGET (one file per week is normal); week number from the sheet name, else from the A1 title; `MẪU` is not a week unless it is the workbook's only sheet (then its week comes from A1).

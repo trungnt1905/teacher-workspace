@@ -88,24 +88,37 @@ export function toggleDayOff(overrides, weekNumber, day, currentState) {
 }
 
 /**
- * Reasons why weeks cannot be selected, grouped so that "missing sheet" for 8 weeks is one line
- * ("Tuần 1, 2, 3…") instead of 8 identical messages. Other problems keep their own message.
+ * Why a target week cannot be selected: 'source_missing' (the source file has no such week),
+ * 'has_data' (the target sheet is already filled) or 'error' (sheet unreadable, duplicate, …).
+ */
+export function weekProblem(week) {
+  if (week.selectable) return null
+  const codes = week.errors.map((e) => e.code)
+  if (codes.length === 1 && codes[0] === 'SOURCE_WEEK_SHEET_MISSING') return 'source_missing'
+  if (codes.length === 1 && codes[0] === 'TARGET_WEEK_HAS_DATA') return 'has_data'
+  return 'error'
+}
+
+/**
+ * Reasons why weeks cannot be selected, grouped so that the same reason for several weeks is one
+ * line ("Tuần 9, Tuần 10…") instead of repeated messages. Other problems keep their own message.
  */
 export function unavailableGroups(weeks) {
-  const grouped = { missing: [], has_data: [] }
+  const grouped = { source_missing: [], has_data: [] }
   const others = []
   for (const w of weeks ?? []) {
-    if (w.selectable) continue
-    if (w.target_status in grouped && w.errors.length <= 1) grouped[w.target_status].push(w.week_number)
+    const problem = weekProblem(w)
+    if (!problem) continue
+    if (problem in grouped) grouped[problem].push(w.week_number)
     else others.push(...w.errors.map((e) => ({ tone: 'red', title: `Tuần ${w.week_number}`, text: e.message })))
   }
   const list = (nums) => nums.map((n) => `Tuần ${n}`).join(', ')
   const groups = []
-  if (grouped.missing.length) {
-    groups.push({ tone: 'amber', title: 'Chưa có sheet trong file đích', text: `${list(grouped.missing)} — tạo sheet tuần (copy sheet MẪU hoặc một sheet tuần khác) rồi tải lại file đích.` })
+  if (grouped.source_missing.length) {
+    groups.push({ tone: 'amber', title: 'File nguồn không có tuần này', text: `${list(grouped.source_missing)} — chọn file nguồn có các tuần này nếu muốn đồng bộ.` })
   }
   if (grouped.has_data.length) {
-    groups.push({ tone: 'gray', title: 'Sheet đã có dữ liệu (bỏ qua)', text: `${list(grouped.has_data)} — muốn làm lại thì xóa sheet đó và copy lại từ MẪU.` })
+    groups.push({ tone: 'gray', title: 'Sheet đã có dữ liệu (bỏ qua)', text: `${list(grouped.has_data)} — muốn làm lại thì dùng sheet tuần còn trống.` })
   }
   return [...groups, ...others]
 }

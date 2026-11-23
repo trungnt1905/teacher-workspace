@@ -2,7 +2,7 @@
 
 ## Detail Design — Kiến trúc và đặc tả kỹ thuật MVP
 
-- **Phiên bản tài liệu:** 1.12
+- **Phiên bản tài liệu:** 1.15
 - **Ngày:** 19/11/2026
 - **Trạng thái:** Bản thiết kế đề xuất để triển khai MVP
 - **Ngôn ngữ:** Tiếng Việt
@@ -25,6 +25,9 @@
 | 1.10 | 20/11/2026 | Thiết kế lại giao diện (thẻ trắng, bố cục 2 cột, lưới ô tuần, icon Lucide, font Inter) và thêm hệ thống giao diện: `tokens.css` (màu 2 lớp), `components.css`, `components/ui/`, `docs/design-system.md`, test chặn màu viết cứng. |
 | 1.11 | 20/11/2026 | Phase 5–6: kiểm tra production (HTTPS, cookie, CSRF, 401, file nhạy cảm), phiên còn sau restart; sửa `APP_NAME`, thêm HSTS, `SESSION_LIFETIME` mặc định; `docs/user-guide.md`; bảng nghiệm thu mục 17 kèm bằng chứng. Giao diện chỉ dành cho máy tính. |
 | 1.12 | 20/11/2026 | Sheet `MẪU` không còn bắt buộc trong file đích (chỉ cần sheet tuần); bỏ lỗi `TEMPLATE_SHEET_MISSING`. |
+| 1.13 | 20/11/2026 | Tiêu đề tuần, ngày tháng, ngày ký luôn sửa theo nguồn cho tuần được chọn (kể cả khi không môn nào được điền), chỉ ghi ô khác biệt; màn xem trước hiển thị bảng thay đổi (`header_changes`). |
+| 1.14 | 23/11/2026 | File chuẩn mới `MAU_LBG.xlsx` (lệch 1 dòng so với file cũ): tọa độ cố định theo file mới + tự tìm bảng theo nội dung khi không khớp (`layout.py`). Mỗi tuần có thể là một file: danh sách tuần lấy theo file đích, tuần lấy từ tên sheet hoặc A1. Thêm `NO_TARGET_WEEK_SHEETS`. |
+| 1.15 | 23/11/2026 | File chỉ có một sheet `MẪU` (file một tuần tạo từ mẫu) → sheet đó là tuần, số tuần lấy từ `A1`. |
 
 ------------------------------------------------------------------------
 
@@ -163,7 +166,9 @@ Hai file có cấu trúc bảng gần như giống hệt nhau. Khác biệt ch�
 - Tên bài.
 - Đồ dùng dạy học.
 
-**\[ĐÃ CHỐT\]** File nguồn và file đích có cùng bố cục, tọa độ ô cố định (đã xác nhận với file mẫu `LBG_mau.xlsx`: sheet `MẪU` + 9 sheet `TUẦN 1`…`TUẦN 9`, tất cả cùng vùng `A1:F36` và cùng 18 vùng gộp ô). Dùng **một parser và một template profile** (mục 8.2) cho cả hai file.
+**\[ĐÃ CHỐT 23/11/2026\]** File chuẩn hiện tại là **`MAU_LBG.xlsx`** (tiêu đề `A1`, hàng tiêu đề cột ở dòng 3, tiết học dòng 4–35, ngày ký `E36`). Các file cũ (như `LBG_mau.xlsx`, bảng bắt đầu sớm hơn 1 dòng) vẫn đọc được: hệ thống thử tọa độ cố định của file chuẩn trước, không khớp thì **tự tìm bảng theo nội dung** (mục 8.2). Dùng một parser cho cả hai file; file nguồn và file đích có thể khác bố cục.
+
+**\[ĐÃ CHỐT 23/11/2026\] Mỗi tuần có thể là một file riêng.** File đích có tuần nào thì xử lý tuần đó; file nguồn có thể có nhiều tuần hơn (tuần thừa bỏ qua). Số tuần lấy từ tên sheet (`TUẦN 10`); nếu tên sheet khác (ví dụ `Sheet1`) thì lấy từ ô tiêu đề `A1` (“TUẦN 10 (…)”). Sheet `MẪU` không được coi là một tuần — **trừ khi nó là sheet duy nhất của file** (file một tuần tạo thẳng từ mẫu, chưa đổi tên sheet): khi đó tuần lấy từ `A1` và sheet `MẪU` chính là sheet tuần được xử lý (đã chốt 23/11/2026).
 
 ## 4.2. File nguồn
 
@@ -211,21 +216,22 @@ Giao diện phải có hướng dẫn ngắn kèm hình minh họa cho bước n
 
 ## 4.5. Trạng thái sheet tuần trong file đích \[ĐÃ CHỐT\]
 
-Với mỗi tuần được chọn, hệ thống tìm sheet cùng số tuần trong file đích và phân loại:
+Danh sách tuần = **các tuần có trong file đích** (mục 4.1). Với mỗi tuần, hệ thống tìm tuần tương ứng ở file nguồn và phân loại sheet đích:
 
 | Trạng thái | Điều kiện | Hành động |
 |---|---|---|
 | `ready` | Có sheet tuần, mọi ô tên bài đều trống | Xử lý |
 | `has_data` | Có sheet tuần, có ít nhất một ô tên bài đã có nội dung | **Không xử lý**, báo "Sheet TUẦN X đã có dữ liệu" |
-| `missing` | Không có sheet tuần tương ứng | **Không xử lý**, báo "Chưa có sheet TUẦN X — hãy copy sheet MẪU" |
-| `invalid_structure` | Sheet tuần không khớp cấu trúc template profile | **Không xử lý**, báo vị trí sai khác |
+| `invalid_structure` | Không tìm được bảng (theo tọa độ cố định lẫn theo nội dung), hoặc có ô gộp che ô tên bài/đồ dùng | **Không xử lý**, báo lý do |
+| (nguồn thiếu) | File nguồn không có tuần này | **Không xử lý**, báo `SOURCE_WEEK_SHEET_MISSING` |
 
 Ghi chú:
 
 - So khớp sheet theo **số tuần** sau chuẩn hóa (mục 8.4), ví dụ `TUẦN 9` và `TUẦN 09` là cùng tuần.
 - Nếu file đích có hai sheet cùng số tuần → lỗi `DUPLICATE_WEEK_SHEET`, không xử lý tuần đó.
 - Quy tắc `has_data` cho phép làm việc tăng dần: giáo viên có thể upload file kết quả lần trước làm file đích cho lần sau; các tuần đã điền sẽ tự được bỏ qua.
-- Muốn xử lý lại một tuần: giáo viên xóa sheet đó, copy lại từ `MẪU`.
+- Muốn xử lý lại một tuần: dùng sheet/file tuần còn trống.
+- File đích không có sheet tuần nào → lỗi `NO_TARGET_WEEK_SHEETS`.
 
 ## 4.6. Phân phối nội dung theo môn
 
@@ -430,6 +436,8 @@ Kết quả phân tích file mẫu: mọi ô ngày tháng là **chuỗi văn b�
 Quy tắc:
 
 - Copy **nguyên văn** chuỗi từ các ô trên của file nguồn sang sheet đích, kể cả dấu cách đầu dòng. Không tự dựng lại chuỗi, vì hai lớp cùng trường dùng chung lịch.
+- **\[ĐÃ CHỐT 20/11/2026\]** Với mỗi tuần được chọn và không bị chặn, tiêu đề tuần, ngày từng thứ và ngày ký **luôn** được sửa theo nguồn — kể cả khi không môn nào được điền. Chỉ ghi các ô có giá trị khác file đích (`header_changes`); màn xem trước liệt kê từng thay đổi “hiện tại → sẽ đổi thành”.
+- Tên tab sheet không bao giờ bị đổi (hệ thống tìm sheet theo tên tab).
 - Trước khi copy, parse để kiểm tra: số tuần trong `A1` khớp tên sheet; ngày trong `A3…A29` nằm trong khoảng ngày của `A1`; `E35` đúng mẫu "Ngày d tháng m năm yyyy". Không khớp → lỗi chặn tuần `INVALID_SOURCE_DATE`.
 - `E36` ("BGH duyệt") và hàng tiêu đề `A2:F2` là nội dung cố định, không ghi.
 - Không thay đổi ô nào ngoài các ô đã khai báo.
@@ -780,66 +788,40 @@ Không nhồi toàn bộ logic Excel vào controller.
 - Kiểm tra trạng thái sheet tuần (`ready`/`has_data`/…).
 - Kiểm tra sau khi ghi: chỉ các ô trong whitelist thay đổi; style và merged ranges không đổi; output mở lại được.
 
-## 8.2. Template profile
+## 8.2. Vị trí ô: tọa độ cố định + tìm theo nội dung \[ĐÃ CHỐT 23/11/2026\]
 
-Mọi tọa độ ô và quy tắc cấu trúc nằm trong `template_profile.json`, không hardcode trong parser. **\[ĐÃ CHỐT\]** Tọa độ cố định, lấy từ file mẫu `LBG_mau.xlsx`:
+Code: `python/common/layout.py` → `resolve_layout(sheet)` trả về `Layout` riêng cho **từng sheet**.
 
-Bố cục sheet (vùng `A1:F36`):
+**Bước 1 — tọa độ cố định** (`template_profile.json`, theo file chuẩn `MAU_LBG.xlsx`):
 
-| Ngày | Ô ngày (gộp) | Buổi sáng | Buổi chiều | Số tiết |
-|---|---|---|---|---:|
-| Hai | `A3:A9` | dòng 3–6 (`B3:B6`) | dòng 7–9 (`B7:B9`) | 7 |
-| Ba | `A10:A16` | dòng 10–13 (`B10:B13`) | dòng 14–16 (`B14:B16`) | 7 |
-| Tư | `A17:A22` | dòng 17–20 (`B17:B20`) | dòng 21–22 (`B21:B22`) | 6 |
-| Năm | `A23:A28` | dòng 23–26 (`B23:B26`) | dòng 27–28 (`B27:B28`) | 6 |
-| Sáu | `A29:A34` | dòng 29–32 (`B29:B32`) | dòng 33–34 (`B33:B34`) | 6 |
+| Thành phần | Ô |
+|---|---|
+| Tiêu đề tuần | `A1` (luôn cố định) |
+| Hàng tiêu đề cột | dòng 3: `A3` Thứ, `B3` Buổi, `C3` Tiết, `D3` Môn, `E3` Tên bài, `F3` Đồ dùng dạy học |
+| Thứ Hai | `A4`, sáng 4–7, chiều 8–10 |
+| Thứ Ba | `A11`, sáng 11–14, chiều 15–17 |
+| Thứ Tư | `A18`, sáng 18–21, chiều 22–23 |
+| Thứ Năm | `A24`, sáng 24–27, chiều 28–29 |
+| Thứ Sáu | `A30`, sáng 30–33, chiều 34–35 |
+| Ngày ký | `E36` |
 
-Cột: `C` = số tiết, `D` = môn, `E` = tên bài, `F` = đồ dùng dạy học.
+Sheet được coi là khớp khi các ô `A3…E3` đúng nhãn và ô ngày của từng thứ bắt đầu bằng nhãn thứ.
 
-Ghi chú: giá trị cột `C` (số thứ tự tiết) **khác nhau giữa các sheet**, ví dụ chiều thứ Tư là 6–7 ở `MẪU` và `TUẦN 9` nhưng là 5–6 ở `TUẦN 1`. Vì vậy hệ thống xác định slot theo **dòng**, không theo số tiết, và không ghi cột `C`.
+**Bước 2 — không khớp thì tìm theo nội dung** (file cũ, bảng lệch dòng…):
 
-```json
-{
-  "profile_id": "lbg-tieu-hoc-v1",
-  "template_sheet": "MẪU",
-  "week_sheet_pattern": "^TU[ẦA]N\\s*0*(\\d{1,2})$",
-  "used_range": "A1:F36",
-  "cells": {
-    "week_title": "A1",
-    "sign_date": "E35"
-  },
-  "structure_anchors": [
-    { "cell": "A2", "value": "Thứ" },
-    { "cell": "B2", "value": "Buổi" },
-    { "cell": "C2", "value": "Tiết" },
-    { "cell": "D2", "value": "Môn" },
-    { "cell": "E2", "value": "Tên bài" }
-  ],
-  "expected_merged_ranges": [
-    "A1:F1", "A3:A9", "A10:A16", "A17:A22", "A23:A28", "A29:A34",
-    "B3:B6", "B7:B9", "B10:B13", "B14:B16", "B17:B20", "B21:B22",
-    "B23:B26", "B27:B28", "B29:B32", "B33:B34", "E35:F35", "E36:F36"
-  ],
-  "days": [
-    { "label": "Hai", "date_cell": "A3",  "sessions": { "SÁNG": [3, 6],   "CHIỀU": [7, 9] } },
-    { "label": "Ba",  "date_cell": "A10", "sessions": { "SÁNG": [10, 13], "CHIỀU": [14, 16] } },
-    { "label": "Tư",  "date_cell": "A17", "sessions": { "SÁNG": [17, 20], "CHIỀU": [21, 22] } },
-    { "label": "Năm", "date_cell": "A23", "sessions": { "SÁNG": [23, 26], "CHIỀU": [27, 28] } },
-    { "label": "Sáu", "date_cell": "A29", "sessions": { "SÁNG": [29, 32], "CHIỀU": [33, 34] } }
-  ],
-  "columns": {
-    "period": "C",
-    "subject": "D",
-    "lesson": "E",
-    "equipment": "F"
-  }
-}
-```
+1. Hàng tiêu đề cột: hàng đầu tiên (trong 20 dòng đầu) có đủ “Thứ”, “Môn”, “Tên bài”, “Đồ dùng…” → xác định các cột (kể cả “Buổi”, “Tiết” nếu có).
+2. Khối ngày: các ô ở cột Thứ bắt đầu bằng “Hai”, “Ba”, “Tư”, “Năm”, “Sáu” (đúng thứ tự); phạm vi dòng lấy theo vùng gộp ô của cột Thứ.
+3. Buổi: nhãn “SÁNG”/“CHIỀU” ở cột Buổi (theo vùng gộp ô).
+4. Ngày ký: ô ở cột Tên bài ngay dưới bảng (ô có chữ “Ngày…”, nếu không có thì dòng ngay sau tiết cuối).
+5. Tiêu đề tuần: vẫn là `A1`.
 
-- Không dùng `E35`/`E36` (ngày ký, "BGH duyệt") làm mốc cấu trúc: file đích thật `TUẦN 8.xlsx` để trống hai ô này (ô vẫn tồn tại và có định dạng, nên vẫn ghi được ngày ký).
-- `structure_anchors` và `expected_merged_ranges` dùng để kiểm tra sheet tuần có đúng cấu trúc (trạng thái `invalid_structure`). Không kiểm tra ô môn học, vì giáo viên được phép sửa TKB từng tuần.
-- Ô cho phép ghi (whitelist): `A1`, `A3`, `A10`, `A17`, `A23`, `A29`, `E35`, `E3:E34`, `F3:F34`; cột `D` chỉ khi áp dụng nhóm hoán đổi (mục 4.10).
-- Khi mở rộng sang trường/khối khác chỉ cần thêm profile mới.
+Không tìm được → `INVALID_SHEET_STRUCTURE` kèm lý do (“không tìm thấy hàng tiêu đề cột…”, “không tìm thấy dòng thứ Tư…”).
+
+**Kiểm tra thêm cho file đích:** vùng gộp ô phủ nhiều tiết ở cột Tên bài/Đồ dùng (ví dụ đánh dấu ngày nghỉ) sẽ che giá trị cần ghi → sheet đích bị chặn. File nguồn thì được phép.
+
+**Ô được phép ghi** (whitelist, tính theo `Layout` của sheet đích): tiêu đề `A1`, ô ngày của 5 thứ, ô ngày ký, cột Tên bài và Đồ dùng của các dòng tiết; cột Môn chỉ cho nhóm HĐTV/HĐTT.
+
+**Tiêu đề và ngày tháng** được so khớp theo ý nghĩa (`title`, `day:Hai`…, `sign_date`), không theo tọa độ, nên file nguồn bố cục cũ vẫn điền đúng vào file đích bố cục mới (ví dụ ngày ký nguồn `E35` → đích `E36`).
 
 ## 8.3. Hợp đồng Laravel ↔ Python
 
@@ -926,9 +908,10 @@ Schema minh họa (cần định nghĩa schema chính thức và validate ở c�
 - `subject.status`: `matched`, `skipped_count_mismatch`, `skipped_day_off`, `skipped_empty_lesson`, `skipped_unknown_subject`. Môn không được giáo viên chọn không xuất hiện trong `subjects`.
 - `target_status`: `ready`, `has_data`, `missing`, `invalid_structure`, `duplicate`. `selectable = true` khi `target_status = ready` và không có lỗi.
 - `status` của tuần: `ready` (đã phân tích) hoặc `blocked` (có lỗi chặn tuần trong `errors`).
-- `writes`: danh sách ô → giá trị mà `generate` sẽ ghi (nội bộ, frontend không cần hiển thị). Chỉ có khi tuần có ít nhất một môn `matched`; gồm cả các ô tiêu đề/ngày/ngày ký copy từ nguồn.
+- `header_changes`: các ô tiêu đề/ngày/ngày ký có giá trị khác file nguồn, dạng `{cell, field: title|day_date|sign_date, label, from, to}`; hiển thị ở màn xem trước.
+- `writes`: danh sách ô → giá trị mà `generate` sẽ ghi (nội bộ, frontend không cần hiển thị) = `header_changes` + tên bài/đồ dùng của các môn `matched`.
 - Thứ tự ưu tiên khi một môn có nhiều lý do bỏ qua: chỉ có ở một phía → ảnh hưởng ngày nghỉ → tiết trống → lệch số tiết.
-- `can_generate = true` khi có ít nhất một tuần `ready` có `writes`.
+- `can_generate = true` khi có ít nhất một tuần `ready` có `writes` (môn được điền hoặc tiêu đề/ngày cần sửa).
 
 ## 8.5. Đọc sheet tuần
 
@@ -1162,6 +1145,7 @@ Không trả stack trace, đường dẫn nội bộ, secret hoặc thông tin s
 | `FILE_TOO_LARGE` | Lỗi | Request | File vượt quá dung lượng cho phép. |
 | `WORKBOOK_CORRUPT` | Lỗi | Request | Không mở được file, file có thể bị lỗi. |
 | ~~`TEMPLATE_SHEET_MISSING`~~ | — | — | Bỏ từ bản 1.12: sheet MẪU không còn bắt buộc trong file đích. |
+| `NO_TARGET_WEEK_SHEETS` | Lỗi | Request | File đích không có sheet tuần nào (tên sheet “TUẦN 10” hoặc A1 “TUẦN 10 (…)”). |
 | `NO_WEEK_SHEETS` | Lỗi | Request | File nguồn không có sheet tuần nào. |
 | `JOB_NOT_FOUND` | Lỗi | Request | Phiên xử lý đã hết hạn, vui lòng upload lại. |
 | `ANALYSIS_OUTDATED` | Lỗi | Request | Lựa chọn đã thay đổi, vui lòng phân tích lại. |

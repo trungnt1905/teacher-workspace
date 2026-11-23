@@ -9,15 +9,17 @@ báo giảng của lớp bạn (file đích), **theo đúng thời khóa biểu 
 
 ## 1. Chuẩn bị file (trên máy tính, bằng Excel)
 
-**File nguồn:** lịch báo giảng của lớp khác, đã có tên bài các tuần cần lấy. Không cần sửa gì.
+**File nguồn:** lịch báo giảng của lớp khác, có tuần cần lấy (một file một tuần, hoặc một file nhiều tuần đều được). Không cần sửa gì.
 
-**File đích:** lịch báo giảng của lớp bạn. Hệ thống chỉ dùng các **sheet tuần** (sheet MẪU có hay không đều được). Với mỗi tuần muốn điền:
+**File đích:** lịch báo giảng của lớp bạn, thường **mỗi tuần một file**, tạo từ file mẫu chuẩn **MAU_LBG.xlsx** (đã có thời khóa biểu lớp bạn):
 
-1. Chuột phải vào sheet **MẪU** (hoặc một sheet tuần trống có cùng thời khóa biểu) → **Move or Copy** (Di chuyển hoặc Sao chép).
-2. Tích **Create a copy** (Tạo bản sao) → **OK**.
-3. Đổi tên sheet vừa tạo thành tên tuần, ví dụ **TUẦN 12** (số tuần giống file nguồn).
-4. Nếu tuần đó thời khóa biểu khác bình thường, sửa luôn cột **Môn** trên sheet tuần đó.
+1. Copy file mẫu thành file mới cho tuần cần làm.
+2. Đặt tên sheet theo tuần, ví dụ **TUẦN 12** — hoặc giữ nguyên tên sheet (kể cả “MẪU” nếu file chỉ có một sheet) và để ô tiêu đề **A1** bắt đầu bằng “TUẦN 12”.
+3. Nếu tuần đó thời khóa biểu khác bình thường, sửa luôn cột **Môn** trên sheet.
+4. Không cần sửa ngày tháng và tiêu đề — hệ thống lấy theo file nguồn.
 5. Lưu file dạng **.xlsx**.
+
+Hệ thống chỉ xử lý **các tuần có trong file đích**. File nguồn có thêm tuần khác thì bỏ qua. File kiểu cũ (bảng lệch dòng so với mẫu) vẫn đọc được — hệ thống tự tìm bảng theo nội dung.
 
 > Nếu file của bạn là `.xls`, mở bằng Excel → **File → Save As** → chọn **Excel Workbook (.xlsx)**.
 
@@ -36,12 +38,14 @@ Vào menu **Lịch báo giảng**.
 **Bước 2 — Chọn tuần và môn:**
 
 - Các ô **Tuần**: ô trắng là tuần chọn được, ô xanh là tuần đang chọn. Ô viền nét đứt là tuần chưa dùng được (chấm cam:
-  file đích chưa có sheet tuần đó; chấm xám: sheet đã có dữ liệu). Dòng nhắc bên dưới nói rõ cần làm gì.
+  file nguồn không có tuần đó; chấm xám: sheet đã có dữ liệu; chấm đỏ: không đọc được bảng). Dòng nhắc bên dưới nói rõ cần làm gì.
 - Các ô **Môn**: tích môn nào thì điền môn đó. Nút **Mặc định** bỏ các môn giáo viên bộ môn dạy. Lựa chọn được nhớ cho lần sau.
 - Bấm **Phân tích và xem trước**.
 
 **Bước 3 — Xem trước:**
 
+- Khối **Tiêu đề và ngày tháng**: tiêu đề tuần, ngày từng thứ và ngày ký sẽ được sửa theo file nguồn — bảng ghi rõ
+  giá trị hiện tại và giá trị mới. Bạn không cần tự sửa ngày khi copy sheet tuần.
 - Mỗi môn hiện **Điền** (xanh) hoặc **Bỏ qua** (cam) kèm lý do. Bấm vào một môn để xem từng tiết sẽ điền.
 - Hàng **Ngày nghỉ**: nếu tuần có ngày nghỉ mà hệ thống chưa nhận ra (hoặc nhận nhầm), bấm vào ngày đó để đổi
   *Đi học ↔ Nghỉ*. Hệ thống tự phân tích lại.
@@ -68,7 +72,7 @@ Ngày nghỉ được nhận ra khi cả buổi ở file nguồn không có tên
 
 ## 5. Lưu ý
 
-- Chỉ điền vào **sheet tuần còn trống**. Muốn làm lại một tuần: xóa sheet tuần đó trong file đích, copy lại từ MẪU.
+- Chỉ điền vào **sheet tuần còn trống**. Muốn làm lại một tuần: dùng lại file mẫu trống của tuần đó.
 - Có thể làm dần: dùng file kết quả lần trước làm file đích cho lần sau — các tuần đã điền sẽ tự bỏ qua.
 - File tải lên chỉ dùng để xử lý và **tự xóa sau tối đa 60 phút** (hoặc khi bấm *Làm lượt mới* / *Đăng xuất*).
   Nếu thấy thông báo **"Phiên xử lý đã hết hạn"**, chỉ cần tải file lên lại.

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { AlertTriangle, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, Flag, Loader2, Minus } from 'lucide-vue-next'
+import { AlertTriangle, ArrowRight, CalendarCheck, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, Flag, Info, Loader2, Minus } from 'lucide-vue-next'
 import { useSyncStore } from '../../stores/sync'
 import { dayState, skippedCount, subjectStatus } from '../../utils/timetable'
 import AppPanel from '../ui/AppPanel.vue'
@@ -11,6 +11,7 @@ const weeks = computed(() => sync.analysis?.weeks ?? [])
 const days = computed(() => sync.job?.days ?? [])
 const skipped = computed(() => skippedCount(sync.analysis))
 const busy = computed(() => sync.busy)
+const filledTotal = computed(() => weeks.value.reduce((n, w) => n + counts(w).filled, 0))
 
 const generateLabel = computed(() => {
   if (sync.status === 'generating') return 'Đang tạo file…'
@@ -45,13 +46,17 @@ function minorNotes(week) {
   <AppPanel eyebrow="Bước 3 · Xem trước" title="Kiểm tra trước khi tạo file"
              description="Môn “Điền” sẽ được ghi vào file; môn “Bỏ qua” giữ nguyên để bạn điền tay. Bấm vào ngày để đánh dấu nghỉ.">
     <template #aside>
-      <span class="pill green"><Check /> {{ weeks.reduce((n, w) => n + counts(w).filled, 0) }} môn điền</span>
+      <span class="pill green"><Check /> {{ filledTotal }} môn điền</span>
       <span v-if="skipped" class="pill amber"><Flag /> {{ skipped }} môn bỏ qua</span>
     </template>
 
     <p v-if="!sync.analysis.can_generate" class="callout warn">
       <AlertTriangle />
-      <span>Không có môn nào đủ điều kiện để điền. Kiểm tra lại tuần/môn đã chọn hoặc ngày nghỉ bên dưới.</span>
+      <span>Không có gì để ghi: các tuần đã chọn đều không xử lý được. Kiểm tra lại lý do bên dưới.</span>
+    </p>
+    <p v-else-if="filledTotal === 0" class="callout">
+      <Info />
+      <span>Không có môn nào được điền. File kết quả chỉ cập nhật tiêu đề tuần và ngày tháng theo file nguồn.</span>
     </p>
 
     <article v-for="week in weeks" :key="week.week_number" class="week">
@@ -79,6 +84,24 @@ function minorNotes(week) {
             Thứ {{ day.label }}: {{ DAY_STATE_TEXT[stateOf(week, day)] }}
           </button>
         </div>
+
+        <section class="header-changes" :class="{ none: !week.header_changes.length }">
+          <h4><CalendarCheck /> Tiêu đề và ngày tháng</h4>
+          <p v-if="!week.header_changes.length" class="muted small">Đã đúng theo file nguồn — không thay đổi.</p>
+          <table v-else>
+            <thead>
+              <tr><th>Ô</th><th>Hiện tại (file đích)</th><th></th><th>Sẽ đổi thành (theo file nguồn)</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in week.header_changes" :key="c.cell">
+                <td class="label">{{ c.label }}</td>
+                <td class="old">{{ c.from?.trim() || '(trống)' }}</td>
+                <td class="arrow"><ArrowRight /></td>
+                <td class="new">{{ c.to?.trim() || '(trống)' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
 
         <ul class="subjects">
           <li v-for="subject in week.subjects" :key="subject.subject" :class="subjectStatus(subject.status).tone">
@@ -290,6 +313,63 @@ details[open] .chev {
   margin-left: 6px;
   height: auto;
   white-space: normal;
+}
+
+.header-changes {
+  border: 1px solid var(--color-primary-muted);
+  border-radius: var(--radius);
+  background: var(--color-primary-soft);
+  padding: var(--space-3) 14px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.header-changes.none {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+.header-changes h4 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.header-changes h4 svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+.header-changes table {
+  font-size: var(--text-sm);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.header-changes .label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.header-changes .old {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+.header-changes .new {
+  font-weight: 600;
+  color: var(--color-primary-strong);
+}
+.header-changes .arrow {
+  width: 24px;
+  color: var(--color-text-subtle);
+}
+.header-changes .arrow svg {
+  width: 14px;
+  height: 14px;
 }
 
 .notes {

@@ -15,7 +15,6 @@ import openpyxl
 from lxml import etree
 
 from .errors import EngineError
-from .timetable_parser import header_cells
 
 NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -27,17 +26,6 @@ XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 _PARSER = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False, remove_blank_text=False)
 
 _CELL_REF = re.compile(r"^([A-Z]+)(\d+)$")
-
-
-def allowed_cells(profile: dict) -> set[str]:
-    """Whitelist of cells the engine may write on a week sheet (CLAUDE.md rule 8)."""
-    cols = profile["columns"]
-    cells = set(header_cells(profile))
-    for day in profile["days"]:
-        for first, last in day["sessions"].values():
-            for row in range(first, last + 1):
-                cells.update({f"{cols['lesson']}{row}", f"{cols['equipment']}{row}", f"{cols['subject']}{row}"})
-    return cells
 
 
 def _parse(data: bytes):
@@ -93,11 +81,14 @@ def _patch_sheet(data: bytes, edits: dict[str, str | None], sheet_name: str) -> 
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
 
 
-def write_workbook(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str | None]], profile: dict) -> None:
-    """Copy src to dst, applying value edits to the named sheets. src is never modified."""
-    whitelist = allowed_cells(profile)
+def write_workbook(src: Path, dst: Path, edits_by_sheet: dict[str, dict[str, str | None]],
+                   allowed_by_sheet: dict[str, set[str]]) -> None:
+    """Copy src to dst, applying value edits to the named sheets. src is never modified.
+
+    allowed_by_sheet: whitelist per sheet, from that sheet's Layout.allowed_cells() (CLAUDE.md rule 8).
+    """
     for sheet, edits in edits_by_sheet.items():
-        outside = sorted(set(edits) - whitelist)
+        outside = sorted(set(edits) - allowed_by_sheet.get(sheet, set()))
         if outside:
             raise ValueError(f"Refusing to write non-whitelisted cells on {sheet}: {outside}")
 
